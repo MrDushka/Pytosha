@@ -154,6 +154,7 @@
         <div class="tile"><b>⭐ ${p.xp}</b><small>всего опыта</small></div>
         <div class="tile"><b>📚 ${doneCount}/${LESSONS.length}</b><small>уроков пройдено</small></div>
       </div>
+      ${p.admin ? '<div class="card" style="margin-top:12px;border-color:var(--yellow)">🛠 <b>Режим создателя</b><br><span style="color:var(--muted);font-weight:700">Все уроки открыты, жизни бесконечные. В рейтинге тебя не видно — чтобы не мешать ученикам.</span></div>' : ''}
       <div class="card" style="margin-top:12px">${p.plus ? '👑 <b>Питоша Плюс</b> активен до ' + new Date(p.plusUntil).toLocaleDateString('ru-RU') : '❤️ ' + (p.hearts < C.MAX_HEARTS ? `Жизней: ${p.hearts}/${C.MAX_HEARTS}, новая через ${mins(p.nextHeartMs)}` : 'Все жизни на месте')}
         ${p.freezes ? `<br>🧊 Заморозок серии: ${p.freezes}` : ''}</div>
       ${api.demo ? '<p class="note">Демо-режим: прогресс хранится в этом браузере.</p><button class="big ghost" data-act="reset">Сбросить прогресс</button>' : ''}

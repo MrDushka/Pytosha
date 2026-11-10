@@ -74,7 +74,8 @@
   }
 
   // ---------- Уроки ----------
-  const isUnlocked = (p, lessons, i) => i === 0 || !!p.done[lessons[i - 1].id];
+  // Админу (создателю) открыты все уроки сразу
+  const isUnlocked = (p, lessons, i) => i === 0 || !!p.admin || !!p.done[lessons[i - 1].id];
 
   // Текстовый ответ: без регистра, лишних пробелов и кавычек вокруг; полный код тоже засчитывается
   const norm = s => String(s).trim().toLowerCase().replace(/ё/g, 'е')
