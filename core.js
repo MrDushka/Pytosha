@@ -99,10 +99,27 @@
     return { xp, firstTime, perfect: mistakes === 0, streak: p.streak, streakUp, levelUp: level(p.xp) > lvlBefore, level: level(p.xp) };
   }
 
+  // ---------- Профиль: аватарка и имя для рейтинга ----------
+  const AVATARS = ['🐍', '🦊', '🐼', '🐯', '🐸', '🐵', '🦁', '🐨', '🐙', '🦄', '🐲', '🤖', '👾', '🦖', '🐧', '🐺', '😎', '🥷', '🧙', '👽', '🐱', '🐶', '🦉', '🚀'];
+  // Корни грубых слов — такие имена в рейтинге не пропускаем
+  const BAD = ['хуй', 'хуе', 'хуё', 'пизд', 'ебат', 'ебан', 'ебал', 'еблан', 'бля', 'сука', 'суки', 'мудак', 'мудил', 'пидор', 'пидр', 'гандон', 'долбо', 'шлюх', 'залуп', 'дрочи', 'член', 'жоп',
+    'fuck', 'shit', 'bitch', 'dick', 'pussy', 'nigg', 'cunt', 'porn', 'sex', 'секс', 'порн', 'нацист', 'гитлер', 'hitler'];
+  function cleanName(raw) {
+    const name = String(raw || '').replace(/\s+/g, ' ').trim();
+    if (name.length < 2) return { ok: false, error: 'Имя слишком короткое — минимум 2 символа' };
+    if (name.length > 16) return { ok: false, error: 'Имя слишком длинное — максимум 16 символов' };
+    if (!/^[A-Za-zА-Яа-яЁё0-9 _.\-]+$/.test(name)) return { ok: false, error: 'Можно только буквы, цифры, пробел, точку, - и _' };
+    const flat = name.toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9]/g, '')
+      .replace(/0/g, 'о').replace(/3/g, 'з').replace(/4/g, 'ч').replace(/@/g, 'а');
+    if (BAD.some(b => flat.includes(b.replace(/ё/g, 'е')))) return { ok: false, error: 'Такое имя нельзя — придумай другое' };
+    return { ok: true, name };
+  }
+  const cleanAvatar = a => (AVATARS.includes(a) ? a : AVATARS[0]);
+
   const api = {
     MAX_HEARTS, HEART_MIN, XP_PER_LEVEL, mskDay, prevDay, newPlayer, hasPlus,
     refreshHearts, loseHeart, nextHeartMs, currentStreak, bumpStreak, level, levelProgress, lessonXp,
-    isUnlocked, norm, checkAnswer, finishLesson,
+    isUnlocked, norm, checkAnswer, finishLesson, AVATARS, cleanName, cleanAvatar,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.CORE = api;
 })(typeof self !== 'undefined' ? self : this);

@@ -12,7 +12,11 @@
   if (tg) {
     tg.ready(); tg.expand();
     try { tg.setHeaderColor('#0d1f3c'); tg.setBackgroundColor('#0d1f3c'); } catch (e) { /* старый клиент */ }
-    if (tg.BackButton) tg.BackButton.onClick(() => { if (S.view === 'lesson') askQuit(); else { S.view = 'tabs'; render(); } });
+    if (tg.BackButton) tg.BackButton.onClick(() => {
+      if (S.view === 'lesson') askQuit();
+      else if (S.view === 'register' && S.reg && S.reg.first) return; // без имени дальше нельзя
+      else { S.view = 'tabs'; render(); }
+    });
   }
   const haptic = kind => { try { if (kind === 'ok' || kind === 'bad') tg.HapticFeedback.notificationOccurred(kind === 'ok' ? 'success' : 'error'); else tg.HapticFeedback.impactOccurred('light'); } catch (e) { /* не в Telegram */ } };
 
@@ -49,6 +53,46 @@
     const r = await api.state();
     if (r.error) { $app.innerHTML = `<div class="center">${window.pitosha({ mood: 'sad', size: 140 })}<h1>Не получилось загрузиться</h1><p>Открой Питошу через бота @pythonshkabot</p></div>`; return; }
     S.player = r.player;
+    // Первый вход — знакомимся: аватарка и имя для рейтинга
+    if (!S.player.profile || !S.player.profile.name) openRegister(true);
+    render();
+  }
+
+  // ---------- Регистрация / профиль ----------
+  function openRegister(first) {
+    const p = S.player.profile || {};
+    const tgName = tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.first_name;
+    S.reg = { first, avatar: p.avatar || C.AVATARS[0], name: p.name || (C.cleanName(tgName).ok ? C.cleanName(tgName).name : ''), error: '' };
+    S.view = 'register';
+  }
+  function registerScreen() {
+    const R = S.reg;
+    return `<div class="center reg">
+      <div class="reg-avatar">${esc(R.avatar)}</div>
+      <h1>${R.first ? 'Давай знакомиться!' : 'Твой профиль'}</h1>
+      <p>${R.first ? 'Выбери аватарку и имя — их увидят все в таблице лидеров 🏆' : 'Аватарка и имя видны в таблице лидеров'}</p>
+      <div class="avatar-grid">${C.AVATARS.map(a => `<button class="av ${a === R.avatar ? 'sel' : ''}" data-avatar="${a}">${a}</button>`).join('')}</div>
+      <input class="answer-input name-input" id="reg-name" maxlength="16" autocomplete="off" placeholder="Твоё имя или ник" value="${esc(R.name)}">
+      <div class="reg-error">${esc(R.error || '')}</div>
+      <p class="note">Не пиши фамилию, школу и адрес — это видят все.</p>
+      <div class="bottom"><div class="bottom-inner">
+        <button class="big" data-act="save-profile">${R.first ? 'Начать учиться' : 'Сохранить'}</button>
+        ${R.first ? '' : '<button class="big ghost" data-act="home">Отмена</button>'}
+      </div></div></div>`;
+  }
+  async function saveProfile() {
+    const R = S.reg;
+    const input = document.getElementById('reg-name');
+    R.name = input ? input.value : R.name;
+    const c = C.cleanName(R.name);
+    if (!c.ok) { R.error = c.error; haptic('bad'); return render(); }
+    const r = await api.profile(c.name, R.avatar);
+    if (r.error) { R.error = r.message || 'Не получилось сохранить, попробуй ещё раз'; haptic('bad'); return render(); }
+    S.player = r.player;
+    S.top = null;
+    haptic('ok');
+    if (R.first) toast(`Привет, ${c.name}! Погнали 🐍`);
+    S.view = 'tabs';
     render();
   }
 
@@ -91,7 +135,7 @@
       });
       html += '</div>';
     }
-    html += '<div class="soon">🚧 Раздел 2 «Условия и циклы» — скоро!</div></div>';
+    html += '<div class="soon">🏆 В конце — итоговый экзамен. Пройдёшь все уроки — будешь знать основы Python!</div></div>';
     return html;
   }
 
@@ -101,7 +145,7 @@
     const lv = C.level(p.xp), inLv = C.levelProgress(p.xp);
     const doneCount = LESSONS.filter(l => p.done[l.id]).length;
     return `<div class="screen"><h2 class="title">Профиль</h2>
-      <div class="card"><div class="profile-head">${window.pitosha({ size: 72 })}<div style="flex:1"><b>${esc(p.name || 'Ученик')}</b>
+      <div class="card"><div class="profile-head"><div class="me-avatar">${esc((p.profile && p.profile.avatar) || '🐍')}</div><div style="flex:1"><b>${esc(p.name || 'Ученик')}</b> <button class="edit-btn" data-act="edit-profile">✏️</button>
         <div style="color:var(--muted);font-weight:800">Уровень ${lv} · ${inLv}/${C.XP_PER_LEVEL} XP</div>
         <div class="lvl-bar"><i style="width:${(inLv / C.XP_PER_LEVEL) * 100}%"></i></div></div></div></div>
       <div class="grid2">
@@ -121,7 +165,7 @@
     if (!S.top) { api.top().then(r => { S.top = r.top || []; if (S.tab === 'top') render(); }); return '<div class="screen"><h2 class="title">Рейтинг</h2><p class="note">Загружаю…</p></div>'; }
     const medals = ['🥇', '🥈', '🥉'];
     return `<div class="screen"><h2 class="title">Рейтинг</h2><div class="card">${S.top.length ? S.top.map((u, i) =>
-      `<div class="row ${u.me ? 'me' : ''}"><div class="place">${medals[i] || u.place || i + 1}</div><div class="who">${esc(u.name)}${u.me ? ' (ты)' : ''}</div><div class="pts">${u.xp} XP</div></div>`).join('')
+      `<div class="row ${u.me ? 'me' : ''}"><div class="place">${medals[i] || u.place || i + 1}</div><div class="row-av">${esc(u.avatar || '🐍')}</div><div class="who">${esc(u.name)}${u.me ? ' (ты)' : ''}</div><div class="pts">${u.xp} XP</div></div>`).join('')
       : '<p class="note">Пока пусто — пройди урок и стань первым!</p>'}</div>
       <p class="note">Опыт дают за уроки. Без ошибок — бонус!</p></div>`;
   }
@@ -273,9 +317,12 @@
     if (S.view === 'lesson') html = lessonScreen();
     else if (S.view === 'finish') html = finishScreen();
     else if (S.view === 'nohearts') html = noHeartsScreen();
+    else if (S.view === 'register') html = registerScreen();
     else html = topbar() + ({ learn: learnScreen, top: topScreen, shop: shopScreen, me: meScreen }[S.tab])() + tabs();
     $app.innerHTML = html;
-    if (tg && tg.BackButton) { if (S.view === 'tabs') tg.BackButton.hide(); else tg.BackButton.show(); }
+    if (tg && tg.BackButton) { if (S.view === 'tabs' || (S.view === 'register' && S.reg.first)) tg.BackButton.hide(); else tg.BackButton.show(); }
+    const regInput = document.getElementById('reg-name');
+    if (regInput) regInput.addEventListener('keydown', e => { if (e.key === 'Enter') saveProfile(); });
     const input = document.getElementById('answer');
     if (input && !S.L.checked) {
       input.focus();
@@ -302,6 +349,9 @@
     else if (d.act === 'next') next();
     else if (d.act === 'quit') askQuit();
     else if (d.act === 'home') { S.view = 'tabs'; S.tab = 'learn'; render(); window.scrollTo(0, 0); }
+    else if (d.avatar) { const inp = document.getElementById('reg-name'); if (inp) S.reg.name = inp.value; S.reg.avatar = d.avatar; haptic(); render(); }
+    else if (d.act === 'save-profile') saveProfile();
+    else if (d.act === 'edit-profile') { openRegister(false); render(); window.scrollTo(0, 0); }
     else if (d.act === 'reset') { if (confirm('Сбросить весь прогресс?')) { api.reset(); load(); } }
   });
 

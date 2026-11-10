@@ -25,6 +25,7 @@
       answer: (lessonId, qi, answer) => post('/answer', { lessonId, qi, answer }),
       top: () => post('/top'),
       buy: item => post('/buy', { item }),
+      profile: (name, avatar) => post('/profile', { name, avatar }),
     };
   }
 
@@ -39,7 +40,7 @@
     const view = () => {
       const now = new Date();
       C.refreshHearts(data.player, now);
-      return { ...data.player, name: user.first_name, streakNow: C.currentStreak(data.player, now), nextHeartMs: C.nextHeartMs(data.player, now), plus: C.hasPlus(data.player, now) };
+      return { ...data.player, name: (data.player.profile && data.player.profile.name) || user.first_name, streakNow: C.currentStreak(data.player, now), nextHeartMs: C.nextHeartMs(data.player, now), plus: C.hasPlus(data.player, now) };
     };
     const ok = x => Promise.resolve(x);
     return {
@@ -71,10 +72,17 @@
         return ok({ correct, right: q.type === 'input' ? q.answers[0] : q.options[0], explain: q.explain, finished, failed, player: view() });
       },
       top: () => ok({ top: [
-        { name: 'Алиса', xp: 340 }, { name: 'Тимур', xp: 210 }, { name: 'Соня', xp: 120 },
-        { name: user.first_name, xp: data.player.xp, me: true }, { name: 'Макс', xp: 40 },
+        { name: 'Алиса', avatar: '🦊', xp: 340 }, { name: 'Тимур', avatar: '🐯', xp: 210 }, { name: 'Соня', avatar: '🦄', xp: 120 },
+        { name: view().name, avatar: (data.player.profile || {}).avatar || '🐍', xp: data.player.xp, me: true }, { name: 'Макс', avatar: '🤖', xp: 40 },
       ].sort((a, b) => b.xp - a.xp) }),
       buy: () => ok({ error: 'demo' }),
+      profile(name, avatar) {
+        const c = C.cleanName(name);
+        if (!c.ok) return ok({ error: 'bad_name', message: c.error });
+        data.player.profile = { name: c.name, avatar: C.cleanAvatar(avatar) };
+        save();
+        return ok({ player: view() });
+      },
       reset() { data = { player: C.newPlayer(), session: null }; save(); },
     };
   }
