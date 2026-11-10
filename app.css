@@ -150,6 +150,26 @@ h2.title { font-size: 24px; font-weight: 900; margin: 6px 0 16px; }
 .price:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--yellow-dark); }
 .note { color: var(--muted); font-weight: 700; font-size: 13px; text-align: center; margin-top: 8px; }
 
+/* ---------- Практика: редактор кода ---------- */
+.task { background: var(--card); border: 2px solid var(--line); border-radius: 14px; padding: 12px 14px; font-weight: 700; line-height: 1.45; margin-bottom: 12px; }
+.task code { font-family: var(--mono); background: rgba(255,212,59,.15); color: var(--yellow); padding: 1px 5px; border-radius: 6px; }
+.editor { width: 100%; min-height: 150px; resize: none; overflow: hidden; tab-size: 4; padding: 12px 14px; border-radius: 14px;
+  background: #0a1730; color: #e8f0ff; border: 2px solid var(--blue); font-family: var(--mono); font-size: 15px; line-height: 1.5; outline: none; white-space: pre; overflow-x: auto; }
+.stdin-label { display: block; margin: 10px 0 4px; color: var(--muted); font-weight: 800; font-size: 13px; }
+.stdin { width: 100%; resize: vertical; padding: 8px 12px; border-radius: 12px; background: var(--card); color: var(--text); border: 2px solid var(--line); font-family: var(--mono); font-size: 14px; outline: none; }
+.code-tools { display: flex; gap: 8px; margin: 10px 0; flex-wrap: wrap; }
+.tool { flex: 1; padding: 10px 8px; border-radius: 12px; background: var(--card2); border: 2px solid var(--line); font-weight: 800; font-size: 14px; white-space: nowrap; }
+.tool.ghost { background: transparent; color: var(--muted); }
+.hint { background: rgba(255,212,59,.1); border: 2px dashed var(--yellow-dark); border-radius: 12px; padding: 10px 12px; font-weight: 700; margin-bottom: 10px; }
+.hint code, .console code { font-family: var(--mono); background: rgba(0,0,0,.3); padding: 1px 5px; border-radius: 6px; }
+.console { background: #050d1d; border: 2px solid var(--line); border-radius: 12px; padding: 10px 12px; font-size: 14px; font-weight: 700; }
+.console pre { margin: 6px 0 0; font-family: var(--mono); white-space: pre-wrap; color: #c3e88d; }
+.console-title { color: var(--muted); }
+.console-err, .t-bad { color: var(--red); margin-top: 6px; }
+.t-ok { color: var(--green); margin-top: 6px; }
+.t-tip { color: var(--yellow); margin-top: 8px; }
+pre.code.sol { margin: 8px 0; font-size: 14px; max-height: 220px; overflow: auto; }
+
 /* ---------- Регистрация ---------- */
 .reg { justify-content: flex-start; padding-top: 28px; }
 .reg-avatar { width: 96px; height: 96px; border-radius: 50%; display: grid; place-items: center; font-size: 56px;

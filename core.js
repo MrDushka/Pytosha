@@ -79,7 +79,11 @@
   // Текстовый ответ: без регистра, лишних пробелов и кавычек вокруг; полный код тоже засчитывается
   const norm = s => String(s).trim().toLowerCase().replace(/ё/g, 'е')
     .replace(/^[`'"«“]+|[`'"»”]+$/g, '').replace(/\s+/g, ' ').replace(/\s*([()=+*/,])\s*/g, '$1');
+  // Правильный ответ, который показываем после ошибки
+  const rightAnswer = q => (q.type === 'input' ? q.answers[0] : q.type === 'code' ? q.solution : q.options[0]);
   function checkAnswer(q, answer) {
+    // Практика: код запускается и проверяется тестами у ученика (Python в браузере), сюда приходит итог
+    if (q.type === 'code') return !!(answer && answer.passed === true);
     if (q.type === 'input') {
       const a = norm(answer);
       return q.answers.some(r => a === norm(r) || (q.code && a === norm(q.code.replace('___', r))));
@@ -119,7 +123,7 @@
   const api = {
     MAX_HEARTS, HEART_MIN, XP_PER_LEVEL, mskDay, prevDay, newPlayer, hasPlus,
     refreshHearts, loseHeart, nextHeartMs, currentStreak, bumpStreak, level, levelProgress, lessonXp,
-    isUnlocked, norm, checkAnswer, finishLesson, AVATARS, cleanName, cleanAvatar,
+    isUnlocked, norm, checkAnswer, rightAnswer, finishLesson, AVATARS, cleanName, cleanAvatar,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.CORE = api;
 })(typeof self !== 'undefined' ? self : this);

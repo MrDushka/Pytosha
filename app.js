@@ -202,6 +202,7 @@
     if (r.error === 'no_hearts') { S.view = 'nohearts'; return render(); }
     if (r.error) return toast('Не получилось начать урок');
     S.L = { id, lesson: lessonById(id), i: 0, order: null, sel: null, text: '', checked: null, correct: 0 };
+    if (S.L.lesson.questions.some(q => q.type === 'code')) window.PY.preload(); // качаем Python заранее
     newQuestion();
     S.view = 'lesson';
     render();
@@ -211,10 +212,90 @@
     const q = L.lesson.questions[L.i];
     L.sel = null; L.text = ''; L.checked = null;
     L.order = q.options ? shuffle(q.options.map((_, k) => k)) : null;
+    if (q.type === 'code') {
+      L.code = q.starter || '';
+      L.out = ''; L.hint = false; L.tries = 0; L.running = false;
+      L.stdin = ((q.tests || []).find(t => t.stdin) || {}).stdin || '';
+    }
+  }
+
+  // ---------- Практика: пишем код ----------
+  function codeBlock(q, L) {
+    let html = `<div class="task">${q.task}</div>`;
+    html += `<textarea class="editor" id="editor" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off">${esc(L.code)}</textarea>`;
+    if (L.stdin || (q.tests || []).some(t => t.stdin)) {
+      html += `<label class="stdin-label">⌨️ Что вводит пользователь (каждое значение с новой строки):</label>
+        <textarea class="stdin" id="stdin" spellcheck="false" rows="2">${esc(L.stdin)}</textarea>`;
+    }
+    html += `<div class="code-tools">
+      <button class="tool" data-act="run">${L.running ? '⏳ Запуск…' : '▶️ Запустить'}</button>
+      <button class="tool" data-act="hint">💡 Подсказка</button>
+      <button class="tool ghost" data-act="giveup">🏳️ Решение</button></div>`;
+    if (L.hint && q.hint) html += `<div class="hint">💡 ${q.hint}</div>`;
+    if (L.out) html += `<div class="console">${L.out}</div>`;
+    return html;
+  }
+  const pyFail = r => (r.error === 'timeout'
+    ? '⏱ Программа работает слишком долго. Может быть, бесконечный цикл?'
+    : (!window.PY.isWarm() ? '📶 Не получилось загрузить Python. Проверь интернет и попробуй ещё раз.' : '⚠️ ' + esc(r.error)));
+
+  async function runCode() {
+    const L = S.L;
+    syncEditor();
+    L.running = true; L.out = !window.PY.isWarm() ? '⏳ Загружаю Python (только в первый раз, ~10 секунд)…' : ''; render();
+    const r = await window.PY.run(L.code, [{ run: true, stdin: L.stdin }]);
+    L.running = false;
+    if (r.error) L.out = pyFail(r);
+    else {
+      const t = r.results[0];
+      L.out = `<div class="console-title">Вывод программы:</div><pre>${esc(t.printed || '(ничего не напечатано)')}</pre>` +
+        (t.err ? `<div class="console-err">❌ ${esc(t.err)}</div>` : '');
+    }
+    render();
+  }
+  async function checkCode() {
+    const L = S.L, q = L.lesson.questions[L.i];
+    syncEditor();
+    if (!L.code.trim()) return toast('Сначала напиши код ✍️');
+    L.running = true; L.out = !window.PY.isWarm() ? '⏳ Загружаю Python (только в первый раз, ~10 секунд)…' : '⏳ Проверяю…'; render();
+    const r = await window.PY.run(L.code, q.tests);
+    L.running = false;
+    if (r.error) { L.out = pyFail(r); return render(); }
+    const passed = r.results.every(t => t.ok);
+    if (passed) return submitCode(true);
+    L.tries++;
+    haptic('bad');
+    const good = r.results.filter(t => t.ok).length;
+    L.out = `<div class="console-title">Тесты: ${good} из ${r.results.length} ✅ — исправь и проверь ещё раз (жизни не тратятся)</div>` +
+      r.results.map((t, k) => {
+        const what = t.expr ? `<code>${esc(t.expr)}</code>` : (t.stdin ? `ввод <code>${esc(t.stdin.replace(/\n/g, ' ⏎ '))}</code>` : `тест ${k + 1}`);
+        if (t.ok) return `<div class="t-ok">✅ ${what}</div>`;
+        const got = t.err ? `ошибка: ${esc(t.err)}` : `получилось <code>${esc(t.expr ? (t.got || '') : (t.printed || '(пусто)'))}</code>`;
+        return `<div class="t-bad">❌ ${what}: ждали <code>${esc(t.expected)}</code>, ${got}</div>`;
+      }).join('') + (L.tries >= 2 && !L.hint && q.hint ? '<div class="t-tip">Застрял? Нажми «💡 Подсказка».</div>' : '');
+    render();
+  }
+  async function submitCode(passed) {
+    const L = S.L;
+    L.busy = true;
+    const r = await api.answer(L.id, L.i, { passed });
+    L.busy = false;
+    if (r.error) { toast('Связь потерялась, попробуй ещё раз'); return render(); }
+    S.player = r.player;
+    L.checked = r;
+    if (r.correct) L.correct++;
+    haptic(r.correct ? 'ok' : 'bad');
+    render();
+  }
+  function syncEditor() {
+    const ed = document.getElementById('editor');
+    if (ed && S.L) S.L.code = ed.value;
+    const si = document.getElementById('stdin');
+    if (si && S.L) S.L.stdin = si.value;
   }
   function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
-  const KIND = { choice: '❓ Выбери ответ', output: '🖥 Что выведет код?', bug: '🐞 Найди ошибку', input: '✍️ Напиши ответ' };
+  const KIND = { choice: '❓ Выбери ответ', output: '🖥 Что выведет код?', bug: '🐞 Найди ошибку', input: '✍️ Напиши ответ', code: '💻 Напиши программу' };
   function lessonScreen() {
     const L = S.L, q = L.lesson.questions[L.i], n = L.lesson.questions.length, ch = L.checked;
     const pct = ((L.i + (ch ? 1 : 0)) / n) * 100;
@@ -224,7 +305,10 @@
     if (L.i === 0) html += `<div class="intro"><div style="flex:none">${window.pitosha({ size: 84 })}</div><div class="bubble">${L.lesson.intro}</div></div>`;
     html += `<div class="q-kind">${KIND[q.type]}</div><div class="q-text">${esc(q.q)}</div>`;
     if (q.code) html += `<pre class="code">${highlight(q.code)}</pre>`;
-    if (q.type === 'input') {
+    if (q.type === 'code') {
+      if (!ch) html += codeBlock(q, L);
+      else html += `<pre class="code">${highlight(L.code || '')}</pre>`;
+    } else if (q.type === 'input') {
       const cls = ch ? (ch.correct ? 'opt right' : 'opt wrong') : '';
       html += `<input class="answer-input ${cls}" id="answer" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Твой ответ…" value="${esc(L.text)}" ${ch ? 'disabled' : ''}>`;
       if (!ch) html += `<button class="idk" data-act="idk">Не знаю 🤷</button>`;
@@ -240,13 +324,18 @@
     html += '</div>';
     // Нижняя панель: «Проверить» или результат
     if (!ch) {
-      const ready = q.type === 'input' ? L.text.trim().length > 0 : L.sel !== null;
-      html += `<div class="bottom"><div class="bottom-inner"><button class="big green" data-act="check" ${ready ? '' : 'disabled'}>Проверить</button></div></div>`;
+      if (q.type === 'code') {
+        html += `<div class="bottom"><div class="bottom-inner"><button class="big green" data-act="check-code" ${L.running ? 'disabled' : ''}>${L.running ? '⏳ Проверяю…' : 'Проверить'}</button></div></div>`;
+      } else {
+        const ready = q.type === 'input' ? L.text.trim().length > 0 : L.sel !== null;
+        html += `<div class="bottom"><div class="bottom-inner"><button class="big green" data-act="check" ${ready ? '' : 'disabled'}>Проверить</button></div></div>`;
+      }
     } else {
       const ok = ch.correct;
+      const rightHtml = q.type === 'code' ? `Вот решение:<pre class="code sol">${highlight(ch.right || '')}</pre>` : `Правильно: <code>${esc(ch.right)}</code><br>`;
       html += `<div class="bottom ${ok ? 'ok' : 'bad'}"><div class="bottom-inner">
-        <div class="fb-title">${ok ? '✅ ' + ['Отлично!', 'Верно!', 'Имба!', 'Красава!', 'В точку!'][Math.floor(Math.random() * 5)] : '❌ Не совсем'}</div>
-        <div class="fb-text">${ok ? '' : `Правильно: <code>${esc(ch.right)}</code><br>`}💡 ${esc(ch.explain || '')}</div>
+        <div class="fb-title">${ok ? '✅ ' + (q.type === 'code' ? 'Все тесты пройдены!' : ['Отлично!', 'Верно!', 'Имба!', 'Красава!', 'В точку!'][Math.floor(Math.random() * 5)]) : (q.type === 'code' ? '🏳️ Ничего, разберём' : '❌ Не совсем')}</div>
+        <div class="fb-text">${ok ? '' : rightHtml}💡 ${esc(ch.explain || '')}</div>
         <button class="big ${ok ? 'green' : 'red'}" data-act="next">Дальше</button></div></div>`;
     }
     return html + '</div>';
@@ -310,6 +399,30 @@
       <button class="big ghost" data-act="home">Вернуться</button></div></div></div>`;
   }
 
+  // Редактор: Tab = 4 пробела, Enter сохраняет отступ (и добавляет 4 после двоеточия), высота по коду
+  function setupEditor(ed) {
+    const fit = () => { ed.style.height = 'auto'; ed.style.height = Math.max(150, ed.scrollHeight + 4) + 'px'; };
+    fit();
+    ed.addEventListener('input', () => { S.L.code = ed.value; fit(); });
+    ed.addEventListener('keydown', e => {
+      const v = ed.value, s = ed.selectionStart, en = ed.selectionEnd;
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        ed.value = v.slice(0, s) + '    ' + v.slice(en);
+        ed.selectionStart = ed.selectionEnd = s + 4;
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const lineStart = v.lastIndexOf('\n', s - 1) + 1;
+        const line = v.slice(lineStart, s);
+        let indent = (line.match(/^ */) || [''])[0];
+        if (/:\s*$/.test(line)) indent += '    ';
+        ed.value = v.slice(0, s) + '\n' + indent + v.slice(en);
+        ed.selectionStart = ed.selectionEnd = s + 1 + indent.length;
+      } else return;
+      S.L.code = ed.value; fit();
+    });
+  }
+
   // ---------- Отрисовка ----------
   function render() {
     if (!S.player) return;
@@ -321,6 +434,8 @@
     else html = topbar() + ({ learn: learnScreen, top: topScreen, shop: shopScreen, me: meScreen }[S.tab])() + tabs();
     $app.innerHTML = html;
     if (tg && tg.BackButton) { if (S.view === 'tabs' || (S.view === 'register' && S.reg.first)) tg.BackButton.hide(); else tg.BackButton.show(); }
+    const editor = document.getElementById('editor');
+    if (editor) setupEditor(editor);
     const regInput = document.getElementById('reg-name');
     if (regInput) regInput.addEventListener('keydown', e => { if (e.key === 'Enter') saveProfile(); });
     const input = document.getElementById('answer');
@@ -345,6 +460,15 @@
     else if (d.opt !== undefined) { S.L.sel = Number(d.opt); haptic(); render(); }
     else if (d.buy) buy(d.buy);
     else if (d.act === 'check') check(false);
+    else if (d.act === 'check-code') { if (!S.L.running) checkCode(); }
+    else if (d.act === 'run') { if (!S.L.running) runCode(); }
+    else if (d.act === 'hint') { syncEditor(); S.L.hint = true; render(); }
+    else if (d.act === 'giveup') {
+      syncEditor();
+      const sure = () => submitCode(false);
+      if (tg && tg.showConfirm) tg.showConfirm('Показать решение? Задача засчитается как ошибка (−1 жизнь).', ok => { if (ok) sure(); });
+      else if (confirm('Показать решение? Задача засчитается как ошибка (−1 жизнь).')) sure();
+    }
     else if (d.act === 'idk') check(true);
     else if (d.act === 'next') next();
     else if (d.act === 'quit') askQuit();

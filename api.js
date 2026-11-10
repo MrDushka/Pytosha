@@ -69,7 +69,7 @@
         if (!correct && data.player.hearts <= 0) { failed = true; data.session = null; }
         else if (s.i >= lesson.questions.length) { finished = C.finishLesson(data.player, lesson, s, now); data.session = null; }
         save();
-        return ok({ correct, right: q.type === 'input' ? q.answers[0] : q.options[0], explain: q.explain, finished, failed, player: view() });
+        return ok({ correct, right: C.rightAnswer(q), explain: q.explain, finished, failed, player: view() });
       },
       top: () => ok({ top: [
         { name: 'Алиса', avatar: '🦊', xp: 340 }, { name: 'Тимур', avatar: '🐯', xp: 210 }, { name: 'Соня', avatar: '🦄', xp: 120 },
