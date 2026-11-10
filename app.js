@@ -311,7 +311,8 @@
       else html += `<pre class="code">${highlight(L.code || '')}</pre>`;
     } else if (q.type === 'input') {
       const cls = ch ? (ch.correct ? 'opt right' : 'opt wrong') : '';
-      html += `<input class="answer-input ${cls}" id="answer" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Твой ответ…" value="${esc(L.text)}" ${ch ? 'disabled' : ''}>`;
+      // В форме: кнопка «Готово/Перейти» на телефонной клавиатуре отправляет форму, даже если не шлёт клавишу Enter
+      html += `<form id="answer-form" autocomplete="off"><input class="answer-input ${cls}" id="answer" enterkeyhint="go" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Твой ответ… (Enter — проверить)" value="${esc(L.text)}" ${ch ? 'disabled' : ''}></form>`;
       if (!ch) html += `<button class="idk" data-act="idk">Не знаю 🤷</button>`;
     } else {
       const mono = q.options.some(o => /[()"=]/.test(o)) || q.type === 'output';
@@ -326,7 +327,7 @@
     // Нижняя панель: «Проверить» или результат
     if (!ch) {
       if (q.type === 'code') {
-        html += `<div class="bottom"><div class="bottom-inner"><button class="big green" data-act="check-code" ${L.running ? 'disabled' : ''}>${L.running ? '⏳ Проверяю…' : 'Проверить'}</button></div></div>`;
+        html += `<div class="bottom"><div class="bottom-inner"><button class="big green" data-act="check-code" title="Ctrl+Enter" ${L.running ? 'disabled' : ''}>${L.running ? '⏳ Проверяю…' : 'Проверить'}</button></div></div>`;
       } else {
         const ready = q.type === 'input' ? L.text.trim().length > 0 : L.sel !== null;
         html += `<div class="bottom"><div class="bottom-inner"><button class="big green" data-act="check" ${ready ? '' : 'disabled'}>Проверить</button></div></div>`;
@@ -411,7 +412,7 @@
         e.preventDefault();
         ed.value = v.slice(0, s) + '    ' + v.slice(en);
         ed.selectionStart = ed.selectionEnd = s + 4;
-      } else if (e.key === 'Enter') {
+      } else if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
         const lineStart = v.lastIndexOf('\n', s - 1) + 1;
         const line = v.slice(lineStart, s);
@@ -448,9 +449,25 @@
         const b = document.querySelector('[data-act="check"]');
         if (b) b.disabled = !input.value.trim();
       });
-      input.addEventListener('keydown', e => { if (e.key === 'Enter' && input.value.trim()) check(false); });
+      const form = document.getElementById('answer-form');
+      form.addEventListener('submit', e => { e.preventDefault(); if (input.value.trim()) check(false); });
     }
   }
+
+  // Клавиатура в уроке: Enter — «Проверить», а после проверки — «Дальше». В редакторе кода — Ctrl+Enter.
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || e.repeat || S.view !== 'lesson' || !S.L) return;
+    const L = S.L, q = L.lesson.questions[L.i];
+    const inEditor = e.target && (e.target.id === 'editor' || e.target.id === 'stdin');
+    if (inEditor) {
+      if ((e.ctrlKey || e.metaKey) && !L.checked && !L.running && !L.busy) { e.preventDefault(); checkCode(); }
+      return; // обычный Enter в редакторе — перенос строки
+    }
+    if (L.checked) { if (!L.busy) { e.preventDefault(); next(); } return; }
+    if (e.target && e.target.id === 'answer') return; // поле ответа отправляется через форму
+    if (q.type === 'code') { if ((e.ctrlKey || e.metaKey) && !L.running && !L.busy) { e.preventDefault(); checkCode(); } return; }
+    if (q.type !== 'input' && L.sel !== null) { e.preventDefault(); check(false); }
+  });
 
   $app.addEventListener('click', e => {
     const t = e.target.closest('button');
