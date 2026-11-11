@@ -19,9 +19,18 @@
 
   const hasPlus = (p, now) => !!(p.plusUntil && new Date(p.plusUntil) > now);
 
+  // ---------- Новичок: первые 14 дней жизни не тратятся ----------
+  const NEWBIE_DAYS = 14;
+  const dayNum = iso => Math.floor(Date.parse(iso + 'T00:00:00Z') / 86400000);
+  // Запоминаем первый день ученика (у старых учеников — день, когда впервые зашли после обновления)
+  function ensureStart(p, now) { if (!p.startDay) p.startDay = mskDay(now); return p; }
+  const newbieDaysLeft = (p, now) => (p.startDay ? Math.max(0, NEWBIE_DAYS - (dayNum(mskDay(now)) - dayNum(p.startDay))) : 0);
+  const isNewbie = (p, now) => newbieDaysLeft(p, now) > 0;
+  const unlimitedHearts = (p, now) => hasPlus(p, now) || isNewbie(p, now);
+
   // ---------- Жизни ----------
   function refreshHearts(p, now) {
-    if (hasPlus(p, now)) { p.hearts = MAX_HEARTS; p.heartsAt = null; return p; }
+    if (unlimitedHearts(p, now)) { p.hearts = MAX_HEARTS; p.heartsAt = null; return p; }
     if (p.hearts >= MAX_HEARTS || !p.heartsAt) { if (p.hearts >= MAX_HEARTS) p.heartsAt = null; return p; }
     const step = HEART_MIN * 60000;
     const gained = Math.floor((now - new Date(p.heartsAt)) / step);
@@ -32,7 +41,7 @@
     return p;
   }
   function loseHeart(p, now) {
-    if (hasPlus(p, now)) return p;
+    if (unlimitedHearts(p, now)) return p;
     if (p.hearts >= MAX_HEARTS) p.heartsAt = now.toISOString();
     p.hearts = Math.max(0, p.hearts - 1);
     return p;
@@ -58,6 +67,7 @@
   function bumpStreak(p, now) {
     const today = mskDay(now);
     if (p.lastDay === today) return false;
+    p.activeDays = (p.activeDays || 0) + 1; // дни, когда занимался, — нужны для приглашений
     applyFreeze(p, now);
     p.streak = p.lastDay === prevDay(today) ? p.streak + 1 : 1;
     p.bestStreak = Math.max(p.bestStreak || 0, p.streak);
@@ -92,12 +102,17 @@
     return Number(answer) === 0; // для кнопок: индекс исходного варианта; правильный — options[0]
   }
 
-  // Завершить урок: ответы → опыт, серия, отметка «пройден», ачивки
-  function finishLesson(p, lesson, { correct, mistakes }, now) {
+  // Завершить урок: ответы → опыт, алмазы, серия, отметка «пройден», задания, ачивки
+  function finishLesson(p, lesson, { correct, mistakes }, now, rnd = Math.random) {
     const firstTime = !p.done[lesson.id] || !!p.done[lesson.id].skipped;
     const xp = lessonXp({ firstTime, correct, mistakes });
     const lvlBefore = level(p.xp);
     p.xp += xp;
+    const gems = 1 + Math.floor(rnd() * 10); // 1…10 алмазов за урок
+    p.gems = (p.gems || 0) + gems;
+    questEvent(p, now, 'lessons', 1);
+    questEvent(p, now, 'xp', xp);
+    if (mistakes === 0) questEvent(p, now, 'perfect', 1);
     const prev = p.done[lesson.id];
     p.done[lesson.id] = { best: prev && !prev.skipped ? Math.min(prev.best, mistakes) : mistakes, times: (prev ? prev.times : 0) + 1 };
     // «Неделя без ошибок»: дни подряд, когда все уроки пройдены без ошибок
@@ -109,12 +124,112 @@
     }
     const streakUp = bumpStreak(p, now);
     const ach = checkAchievements(p, now);
-    return { xp, firstTime, perfect: mistakes === 0, streak: p.streak, streakUp, levelUp: level(p.xp) > lvlBefore, level: level(p.xp), ach };
+    return { xp, gems, firstTime, perfect: mistakes === 0, streak: p.streak, streakUp, levelUp: level(p.xp) > lvlBefore, level: level(p.xp), ach };
   }
-  // Учёт ответа: решённые задачи с кодом нужны для ачивок
-  function recordAnswer(p, q, correct) {
+  // Учёт ответа: решённые задачи с кодом и верные ответы нужны для ачивок и заданий
+  function recordAnswer(p, q, correct, now) {
     if (correct && q.type === 'code') p.codeSolved = (p.codeSolved || 0) + 1;
+    if (correct && now) questEvent(p, now, 'correct', 1);
+    if (correct && now && q.type === 'code') questEvent(p, now, 'code', 1);
   }
+
+  // ---------- Задания на день → сундуки с алмазами ----------
+  // Каждый день у всех 3 задания из списка. За каждое — сундук, за все три — большой сундук.
+  const QUESTS = [
+    { id: 'lessons2', type: 'lessons', target: 2, ico: '📘', title: 'Пройди 2 урока', chest: 'bronze' },
+    { id: 'lessons3', type: 'lessons', target: 3, ico: '📚', title: 'Пройди 3 урока', chest: 'silver' },
+    { id: 'perfect1', type: 'perfect', target: 1, ico: '✨', title: 'Пройди урок без ошибок', chest: 'silver' },
+    { id: 'correct15', type: 'correct', target: 15, ico: '✅', title: 'Ответь верно на 15 вопросов', chest: 'bronze' },
+    { id: 'correct25', type: 'correct', target: 25, ico: '🎯', title: 'Ответь верно на 25 вопросов', chest: 'silver' },
+    { id: 'code1', type: 'code', target: 1, ico: '💻', title: 'Реши задачу с кодом', chest: 'bronze' },
+    { id: 'code2', type: 'code', target: 2, ico: '⌨️', title: 'Реши 2 задачи с кодом', chest: 'silver' },
+    { id: 'xp30', type: 'xp', target: 30, ico: '⭐', title: 'Заработай 30 XP', chest: 'bronze' },
+    { id: 'xp60', type: 'xp', target: 60, ico: '🌟', title: 'Заработай 60 XP', chest: 'silver' },
+    { id: 'arena1', type: 'arena', target: 1, ico: '⚔️', title: 'Сыграй на арене', chest: 'bronze' },
+  ];
+  const CHESTS = { bronze: [10, 25], silver: [20, 40], gold: [40, 80] }; // алмазы: от и до
+  function seeded(text) {
+    let seed = 0;
+    for (const ch of text) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+    return () => { seed = (seed * 1103515245 + 12345) >>> 0; return seed / 4294967296; };
+  }
+  function questsFor(day) {
+    const rnd = seeded('quests:' + day), out = [], types = new Set();
+    while (out.length < 3) {
+      const q = QUESTS[Math.floor(rnd() * QUESTS.length)];
+      if (!types.has(q.type)) { types.add(q.type); out.push(q); } // три разных вида заданий
+    }
+    return out;
+  }
+  function questDay(p, now) {
+    const day = mskDay(now);
+    if (!p.quests || p.quests.day !== day) p.quests = { day, progress: {}, claimed: {} };
+    return p.quests;
+  }
+  function questEvent(p, now, type, n) {
+    const Q = questDay(p, now);
+    Q.progress[type] = (Q.progress[type] || 0) + n;
+  }
+  function questStatus(p, now) {
+    const Q = questDay(p, now);
+    const list = questsFor(Q.day).map(q => {
+      const have = Math.min(q.target, Q.progress[q.type] || 0);
+      return { ...q, have, done: have >= q.target, claimed: !!Q.claimed[q.id] };
+    });
+    const allDone = list.every(q => q.done);
+    return { day: Q.day, list, all: { done: allDone, claimed: !!Q.claimed.all } };
+  }
+  // Открыть сундук: id задания или 'all' — большой сундук за все три
+  function claimQuest(p, now, id, rnd = Math.random) {
+    const st = questStatus(p, now);
+    let chest;
+    if (id === 'all') { if (!st.all.done || st.all.claimed) return null; chest = 'gold'; }
+    else {
+      const q = st.list.find(x => x.id === id);
+      if (!q || !q.done || q.claimed) return null;
+      chest = q.chest;
+    }
+    const [lo, hi] = CHESTS[chest];
+    const gems = lo + Math.floor(rnd() * (hi - lo + 1));
+    p.quests.claimed[id] = true;
+    p.gems = (p.gems || 0) + gems;
+    return { chest, gems };
+  }
+
+  // ---------- Алмазы: бесплатная сторона магазина ----------
+  const GEM_SHOP = {
+    heart: { title: '❤️ Одно сердце', description: 'Восстановить одну жизнь', gems: 100 },
+    freeze: { title: '🧊 Заморозка серии', description: 'Пропустишь день — огонь не погаснет', gems: 400 },
+  };
+  function buyWithGems(p, item, now) {
+    const it = GEM_SHOP[item];
+    if (!it) return { error: 'no_item' };
+    if ((p.gems || 0) < it.gems) return { error: 'no_gems' };
+    if (item === 'heart') {
+      refreshHearts(p, now);
+      if (p.hearts >= MAX_HEARTS) return { error: 'full' };
+      p.hearts++;
+      if (p.hearts >= MAX_HEARTS) p.heartsAt = null;
+    }
+    if (item === 'freeze') p.freezes = (p.freezes || 0) + 1;
+    p.gems -= it.gems;
+    return { ok: true };
+  }
+
+  // ---------- Друзья и приглашения ----------
+  // Пригласил друга → неделя Плюса, когда друг что-нибудь купит или позанимается 10 дней
+  const REF_DAYS = 10, REF_PLUS_DAYS = 7;
+  const referralReady = p => !!(p.referredBy && !p.refPaid && ((p.purchases || 0) > 0 || (p.activeDays || 0) >= REF_DAYS));
+  function grantPlusDays(p, days, now) {
+    const from = hasPlus(p, now) ? new Date(p.plusUntil) : now;
+    p.plusUntil = new Date(from.getTime() + days * 86400000).toISOString();
+    p.hearts = MAX_HEARTS; p.heartsAt = null;
+  }
+  const CODE_ABC = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // без похожих 0/O и 1/I
+  function makeCode(rnd = Math.random, len = 6) { let s = ''; for (let k = 0; k < len; k++) s += CODE_ABC[Math.floor(rnd() * CODE_ABC.length)]; return s; }
+  const cleanCode = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+  // Дружеский забег: кто наберёт больше XP за 3 дня. Победителю — сундук.
+  const RACE_DAYS = 3, RACE_PRIZE = 50, RACE_PRIZE_DRAW = 25;
 
   // ---------- Ачивки ----------
   const doneCount = p => Object.values(p.done || {}).filter(d => !d.skipped).length;
@@ -162,6 +277,7 @@
     const day = ((p.dailyRun - 1) % 7) + 1;
     const xp = DAILY_XP[day - 1];
     p.xp += xp;
+    questEvent(p, now, 'xp', xp);
     const freeze = day === 7;
     if (freeze) p.freezes = (p.freezes || 0) + 1;
     return { day, xp, freeze, ach: checkAchievements(p, now) };
@@ -246,6 +362,8 @@
     p.arenaPlayed = (p.arenaPlayed || 0) + 1;
     p.arenaBest = Math.max(p.arenaBest || 0, score.correct);
     p.xp += score.xp;
+    questEvent(p, now, 'arena', 1);
+    questEvent(p, now, 'xp', score.xp);
     return checkAchievements(p, now);
   }
 
@@ -287,6 +405,10 @@
     SHOP, PROMO_LIMIT, applyItem, plusDaysLeft,
     PLACEMENT_UNITS, placementQuestions, applyPlacement,
     ARENA_SIZE, ARENA_MS, arenaQuestions, arenaScore, finishArena,
+    NEWBIE_DAYS, ensureStart, newbieDaysLeft, isNewbie, unlimitedHearts,
+    QUESTS, CHESTS, questsFor, questEvent, questStatus, claimQuest,
+    GEM_SHOP, buyWithGems,
+    REF_DAYS, REF_PLUS_DAYS, referralReady, grantPlusDays, makeCode, cleanCode, RACE_DAYS, RACE_PRIZE, RACE_PRIZE_DRAW,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.CORE = api;
 })(typeof self !== 'undefined' ? self : this);

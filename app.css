@@ -66,6 +66,25 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 .tab { flex: 1; padding: 10px 0 12px; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 12px; font-weight: 800; color: var(--muted); }
 .tab span { font-size: 24px; filter: grayscale(.7); opacity: .8; }
 .tab.active { color: var(--yellow); } .tab.active span { filter: none; opacity: 1; }
+/* 7 вкладок на телефоне: иконки покрупнее, подписи помельче */
+.tab { padding: 8px 0 10px; font-size: 10px; min-width: 0; }
+.tab b { font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.tab span { font-size: 22px; position: relative; }
+.tab .dot { position: absolute; top: -2px; right: -6px; width: 9px; height: 9px; border-radius: 50%; background: var(--red); }
+.side-logo { display: none; }
+@media (max-width: 359px) { .tab b { display: none; } }
+/* На компьютере — боковая панель слева, как в Duolingo */
+@media (min-width: 900px) {
+  body.with-nav { padding-left: 250px; }
+  .tabs { top: 0; right: auto; width: 250px; border-top: 0; border-right: 2px solid var(--line); align-items: flex-start; padding: 18px 12px; }
+  .tabs-inner { flex-direction: column; gap: 6px; }
+  .side-logo { display: block; font-size: 26px; font-weight: 900; color: var(--green); padding: 4px 14px 18px; }
+  .tab { flex: none; flex-direction: row; gap: 16px; padding: 10px 14px; font-size: 15px; letter-spacing: .06em; text-transform: uppercase; border: 2px solid transparent; border-radius: 14px; color: var(--muted); }
+  .tab span { font-size: 28px; filter: none; opacity: 1; }
+  .tab:hover { background: var(--card); }
+  .tab.active { color: #5fc4ff; border-color: #5fc4ff; background: rgba(95,196,255,.1); }
+  .screen { padding-bottom: 40px; }
+}
 
 /* ---------- Урок ---------- */
 .lesson { min-height: 100vh; display: flex; flex-direction: column; padding: 14px 16px 0; }
@@ -253,6 +272,62 @@ h3.sub { font-size: 18px; font-weight: 900; margin: 18px 0 10px; }
 .arena-score { font-size: 46px; font-weight: 900; color: var(--yellow); }
 .arena-score small { display: block; font-size: 15px; color: var(--muted); }
 .arena-time i { background: #ff9f43; transition: width .2s linear; }
+
+/* ---------- Алмазы, новичок, переключатели ---------- */
+.stat.gem { color: #5fc4ff; font-weight: 900; }
+.plus-badge.newbie { background: #9be15d; }
+.banner.newbie { border-color: #9be15d; }
+.reward.b { border-color: #5fc4ff; } .reward.b b { color: #5fc4ff; }
+.rewards { flex-wrap: wrap; } .reward { min-width: 70px; }
+.seg { display: flex; background: var(--card); border: 2px solid var(--line); border-radius: 14px; padding: 4px; margin-bottom: 14px; gap: 4px; }
+.seg button { flex: 1; padding: 9px 6px; border-radius: 10px; font-weight: 900; color: var(--muted); }
+.seg button.on { background: var(--card2); color: var(--text); box-shadow: 0 2px 0 var(--line); }
+.gem-balance { display: flex; align-items: center; gap: 14px; border-color: #5fc4ff; }
+.gem-balance span { font-size: 40px; } .gem-balance b { font-size: 22px; display: block; } .gem-balance small { color: var(--muted); font-weight: 700; }
+.price.gem-price { background: #5fc4ff; box-shadow: 0 4px 0 #2f8fc4; }
+.price:disabled { background: var(--locked); color: var(--muted); box-shadow: 0 4px 0 #24344f; cursor: default; }
+.price.small { padding: 7px 10px; font-size: 13px; }
+
+/* ---------- Задания и сундуки ---------- */
+.quest { display: flex; align-items: center; gap: 12px; }
+.quest.done { border-color: var(--green); }
+.quest.final { border-color: var(--yellow); }
+.q-ico { font-size: 30px; flex: none; }
+.q-body { flex: 1; min-width: 0; } .q-body b { display: block; } .q-body small { color: var(--muted); font-weight: 700; }
+.q-bar { position: relative; height: 18px; background: var(--bg); border-radius: 10px; overflow: hidden; margin-top: 6px; }
+.q-bar i { display: block; height: 100%; background: var(--yellow); border-radius: 10px; transition: width .3s; }
+.q-bar span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 12px; font-weight: 900; }
+.chest { font-size: 24px; flex: none; text-align: center; min-width: 58px; }
+.chest.ready { display: flex; flex-direction: column; align-items: center; animation: bob 1.2s ease-in-out infinite; font-size: 30px; }
+.chest.ready small { font-size: 11px; font-weight: 900; color: var(--yellow); }
+
+/* ---------- Друзья и забеги ---------- */
+.invite { display: flex; flex-direction: column; gap: 8px; border-color: var(--yellow); }
+.invite small, .add-friend small { color: var(--muted); font-weight: 700; line-height: 1.35; }
+.add-friend { display: flex; flex-direction: column; gap: 8px; }
+.friend-row { display: flex; gap: 8px; } .friend-row .answer-input { flex: 1; padding: 10px 12px; font-size: 16px; text-transform: uppercase; }
+.code-chip { font-family: var(--mono); font-weight: 900; color: var(--yellow); background: var(--bg); border-radius: 8px; padding: 2px 8px; }
+.row .who small.sub-line { display: block; color: var(--muted); font-size: 12px; }
+.x-btn { color: var(--muted); font-size: 16px; padding: 4px 6px; }
+.race { display: flex; flex-direction: column; gap: 10px; }
+.race.win { border-color: var(--green); } .race.lose { border-color: var(--red); } .race.draw { border-color: var(--yellow); }
+.race-head { display: flex; align-items: center; gap: 10px; } .race-head .av-img, .race-head { font-size: 22px; }
+.race-head b { flex: 1; font-size: 16px; } .race-head small { color: var(--muted); font-weight: 800; }
+.race-head .av-img { width: 30px; height: 30px; }
+.race-bars > div { display: grid; grid-template-columns: 70px 1fr 70px; align-items: center; gap: 8px; margin: 4px 0; font-weight: 800; font-size: 13px; }
+.race-bars span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.race-bars i { display: block; height: 12px; border-radius: 8px; background: var(--green); min-width: 4px; }
+.race-bars i.them { background: #ff9f43; }
+.race-bars b { text-align: right; }
+
+/* ---------- Ещё: меню настроек ---------- */
+.menu { padding: 4px 0; }
+.menu-row { width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; font-weight: 800; border-bottom: 2px solid var(--line); }
+.menu-row:last-child { border-bottom: 0; } .menu-row i { font-style: normal; color: var(--muted); font-size: 20px; }
+.switch { width: 46px; height: 26px; border-radius: 13px; background: var(--locked); position: relative; transition: background .2s; }
+.switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: left .2s; }
+.switch.on { background: var(--green); } .switch.on::after { left: 23px; }
+.snip-prev { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 13px; color: #c3e88d; }
 
 /* ---------- Темы оформления ---------- */
 :root[data-theme="night"] { --bg: #0b0b12; --bg2: #14141f; --card: #1b1b2a; --card2: #24243a; --line: #33334d; --muted: #a3a3c2; }

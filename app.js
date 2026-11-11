@@ -6,13 +6,23 @@
   const tg = window.Telegram && window.Telegram.WebApp;
   const $app = document.getElementById('app');
 
-  const S = { tab: 'learn', view: 'tabs', player: null, L: null, finish: null, top: null, promo: null, arena: null, arenaTop: null, P: null, sandbox: null };
+  const S = { tab: 'learn', view: 'tabs', player: null, L: null, finish: null, top: null, promo: null, arena: null, arenaTop: null, P: null, sandbox: null,
+    topMode: 'xp', shopSide: 'stars', fr: null, snip: null, snips: null };
 
-  // Хранилище браузера: черновики кода и тема. Может быть недоступно — тогда просто не запоминаем.
+  // Хранилище браузера: черновики кода, тема, вибрация. Может быть недоступно — тогда просто не запоминаем.
   const store = {
     get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
     set(k, v) { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* приватный режим */ } },
   };
+  async function copyText(text, done) {
+    try { await navigator.clipboard.writeText(text); toast(done || 'Скопировано'); } catch (e) { toast(text); }
+  }
+  // Поделиться ссылкой через окно «Переслать» в Telegram
+  function shareLink(link, text) {
+    haptic();
+    const url = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`;
+    if (tg && tg.openTelegramLink) tg.openTelegramLink(url); else window.open(url, '_blank');
+  }
 
   // ---------- Telegram ----------
   if (tg) {
@@ -25,7 +35,7 @@
       else { S.view = 'tabs'; render(); }
     });
   }
-  const haptic = kind => { try { if (kind === 'ok' || kind === 'bad') tg.HapticFeedback.notificationOccurred(kind === 'ok' ? 'success' : 'error'); else tg.HapticFeedback.impactOccurred('light'); } catch (e) { /* не в Telegram */ } };
+  const haptic = kind => { if (store.get('pitosha-vibro') === 'off') return; try { if (kind === 'ok' || kind === 'bad') tg.HapticFeedback.notificationOccurred(kind === 'ok' ? 'success' : 'error'); else tg.HapticFeedback.impactOccurred('light'); } catch (e) { /* не в Telegram */ } };
 
   // ---------- Помощники ----------
   const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -65,6 +75,9 @@
     // Первый вход — знакомимся: аватарка и имя для рейтинга
     if (!S.player.profile || !S.player.profile.name) openRegister(true);
     render();
+    // Открыли по ссылке на чужой код (кнопка «Запустить в Питоше» из бота)
+    const shared = new URLSearchParams(location.search).get('code');
+    if (shared && S.view === 'tabs') openSnippet(shared);
   }
 
   // ---------- Знакомство: новичок или знаю основы ----------
@@ -256,17 +269,21 @@
 
   function topbar() {
     const p = S.player;
-    const hearts = p.plus ? '∞' : p.hearts;
+    const hearts = p.plus || p.newbieDays ? '∞' : p.hearts;
     return `<div class="topbar">
       <div class="stat fire ${p.streakNow ? '' : 'off'}">🔥 ${p.streakNow}</div>
       <div class="stat xp">⭐ ${p.xp}</div>
-      <div class="stat heart">❤️ ${hearts}${p.plus ? ' <span class="plus-badge">PLUS</span>' : ''}</div>
+      <button class="stat gem" data-tab="shop" data-shop-side="gems">💎 ${p.gems || 0}</button>
+      <div class="stat heart">❤️ ${hearts}${p.plus ? ' <span class="plus-badge">PLUS</span>' : p.newbieDays ? ' <span class="plus-badge newbie">🐣</span>' : ''}</div>
     </div>`;
   }
   function tabs() {
-    const t = [['learn', '🏠', 'Учёба'], ['arena', '⚔️', 'Арена'], ['top', '🏆', 'Рейтинг'], ['shop', '🛒', 'Магазин'], ['me', '👤', 'Профиль']];
-    return `<nav class="tabs"><div class="tabs-inner">${t.map(([id, ico, name]) =>
-      `<button class="tab ${S.tab === id ? 'active' : ''}" data-tab="${id}"><span>${ico}</span>${name}</button>`).join('')}</div></nav>`;
+    // Как в Duolingo: на телефоне — снизу, на компьютере — слева боковой панелью
+    const q = S.player.quests, questReady = q && (q.list.some(x => x.done && !x.claimed) || (q.all.done && !q.all.claimed));
+    const t = [['learn', '🏠', 'Обучение'], ['quests', '🎯', 'Задания'], ['top', '🏆', 'Рейтинг'], ['friends', '👥', 'Друзья'],
+      ['shop', '🛒', 'Магазин'], ['me', '👤', 'Профиль'], ['more', '⚙️', 'Ещё']];
+    return `<nav class="tabs"><div class="tabs-inner"><div class="side-logo">🐍 Питоша</div>${t.map(([id, ico, name]) =>
+      `<button class="tab ${S.tab === id ? 'active' : ''}" data-tab="${id}"><span>${ico}${id === 'quests' && questReady ? '<i class="dot"></i>' : ''}</span><b>${name}</b></button>`).join('')}</div></nav>`;
   }
 
   // ---------- Дорожка уроков ----------
@@ -280,6 +297,11 @@
     if (s && p.session.i > 0 && p.session.i < s.questions.length) {
       html += `<button class="card banner resume" data-lesson="${s.id}"><span class="b-ico">${s.emoji}</span>
         <span class="b-text"><b>Продолжить урок</b><small>«${esc(s.title)}» — вопрос ${p.session.i + 1} из ${s.questions.length}</small></span><span class="b-go">▶</span></button>`;
+    }
+    // Режим новичка: первые 14 дней жизни не тратятся
+    if (p.newbieDays && !p.plus) {
+      html += `<div class="card banner newbie"><span class="b-ico">🐣</span><span class="b-text"><b>Режим новичка</b>
+        <small>Ещё ${p.newbieDays} ${days(p.newbieDays)} жизни не тратятся — ошибайся смело!</small></span></div>`;
     }
     // Ежедневный бонус: 7 дней по кругу
     if (p.daily) {
@@ -331,27 +353,28 @@
       ${p.plus && p.plusDays > 3650 ? '<div class="card plus-status"><div>👑 <b>Питоша Плюс</b><br><span>Навсегда</span></div></div>'
         : p.plus ? `<div class="card plus-status ${p.plusDays <= 3 ? 'ending' : ''}"><div>👑 <b>Питоша Плюс</b><br><span>${p.plusDays <= 3 ? '⏳ ' : ''}Закончится через ${p.plusDays} ${days(p.plusDays)} · до ${new Date(p.plusUntil).toLocaleDateString('ru-RU')}</span></div>
           <button class="price" data-act="renew">Продлить</button></div>`
+        : p.newbieDays ? `<div class="card" style="margin-top:12px">🐣 <b>Режим новичка</b>: ещё ${p.newbieDays} ${days(p.newbieDays)} жизни не тратятся
+          <button class="link-btn" data-act="renew">👑 Безлимит жизней и потом — с Плюсом</button></div>`
         : `<div class="card" style="margin-top:12px">❤️ ${p.hearts < C.MAX_HEARTS ? `Жизней: ${p.hearts}/${C.MAX_HEARTS}, новая через ${mins(p.nextHeartMs)}` : 'Все жизни на месте'}
           <button class="link-btn" data-act="renew">👑 Безлимит жизней с Плюсом</button></div>`}
       ${p.freezes ? `<div class="card">🧊 Заморозок серии: ${p.freezes}</div>` : ''}
       <h3 class="sub">🏅 Ачивки · ${Object.keys(p.ach || {}).length}/${C.ACHIEVEMENTS.length}</h3>
       <div class="ach-grid">${C.ACHIEVEMENTS.map(a => { const got = p.ach && p.ach[a.id];
         return `<div class="ach ${got ? 'got' : ''}" title="${esc(a.desc)}"><span>${got ? a.ico : '🔒'}</span><b>${esc(a.title)}</b><small>${esc(a.desc)}</small></div>`; }).join('')}</div>
-      <h3 class="sub">🎨 Тема</h3>
-      <div class="themes">${THEMES.map(t => `<button class="theme-btn ${document.documentElement.dataset.theme === t.id ? 'sel' : ''}" data-theme="${t.id}"><span>${t.ico}</span>${t.name}${t.plus && !canPlus() ? ' 👑' : ''}</button>`).join('')}</div>
       <div class="grid2" style="margin-top:12px">
         <button class="tile tile-btn" data-act="sandbox"><b>🧪</b><small>Песочница${canPlus() ? '' : ' 👑'}</small></button>
         <button class="tile tile-btn" data-act="share"><b>📤</b><small>Поделиться успехами</small></button>
       </div>
-      ${api.demo ? '<p class="note">Демо-режим: прогресс хранится в этом браузере.</p><button class="big ghost" data-act="reset">Сбросить прогресс</button>' : ''}
     </div>`;
   }
 
   // ---------- Рейтинг ----------
   function topScreen() {
-    if (!S.top) { api.top().then(r => { S.top = r.top || []; if (S.tab === 'top') render(); }); return '<div class="screen"><h2 class="title">Рейтинг</h2><p class="note">Загружаю…</p></div>'; }
+    const seg = `<div class="seg"><button class="${S.topMode === 'xp' ? 'on' : ''}" data-top-mode="xp">🏆 Общий</button><button class="${S.topMode === 'arena' ? 'on' : ''}" data-top-mode="arena">⚔️ Арена</button></div>`;
+    if (S.topMode === 'arena') return `<div class="screen"><h2 class="title">Рейтинги</h2>${seg}${arenaScreen()}</div>`;
+    if (!S.top) { api.top().then(r => { S.top = r.top || []; if (S.tab === 'top') render(); }); return `<div class="screen"><h2 class="title">Рейтинги</h2>${seg}<p class="note">Загружаю…</p></div>`; }
     const medals = ['🥇', '🥈', '🥉'];
-    return `<div class="screen"><h2 class="title">Рейтинг</h2><div class="card">${S.top.length ? S.top.map((u, i) =>
+    return `<div class="screen"><h2 class="title">Рейтинги</h2>${seg}<div class="card">${S.top.length ? S.top.map((u, i) =>
       `<div class="row ${u.me ? 'me' : ''}"><div class="place">${medals[i] || u.place || i + 1}</div><div class="row-av">${avatarHtml(u.avatar || '🐍')}</div><div class="who">${esc(u.name)}${u.me ? ' (ты)' : ''}</div><div class="pts">${u.xp} XP</div></div>`).join('')
       : '<p class="note">Пока пусто — пройди урок и стань первым!</p>'}</div>
       <p class="note">Опыт дают за уроки. Без ошибок — бонус!</p></div>`;
@@ -369,7 +392,16 @@
   ];
   function shopScreen() {
     const p = S.player, promo = S.promo;
-    return `<div class="screen"><h2 class="title">Магазин</h2>
+    const seg = `<div class="seg"><button class="${S.shopSide !== 'gems' ? 'on' : ''}" data-shop-side="stars">⭐ За звёзды</button><button class="${S.shopSide === 'gems' ? 'on' : ''}" data-shop-side="gems">💎 Бесплатно</button></div>`;
+    if (S.shopSide === 'gems') {
+      return `<div class="screen"><h2 class="title">Магазин</h2>${seg}
+        <div class="card gem-balance"><span>💎</span><div><b>${p.gems || 0} алмазов</b><small>1–10 за каждый урок, сундуки за задания и забеги</small></div></div>
+        ${Object.entries(C.GEM_SHOP).map(([id, it]) => `<div class="card shop-item"><div class="ico">${it.title.split(' ')[0]}</div>
+          <div class="info"><b>${esc(it.title.slice(it.title.indexOf(' ') + 1))}</b><small>${esc(it.description)}</small></div>
+          <button class="price gem-price" data-gem-buy="${id}" ${(p.gems || 0) < it.gems ? 'disabled' : ''}>${it.gems} 💎</button></div>`).join('')}
+        <p class="note">Алмазы нельзя купить — только заработать учёбой 💪</p></div>`;
+    }
+    return `<div class="screen"><h2 class="title">Магазин</h2>${seg}
       <div class="card plus-card"><div class="plus-head">👑 <b>Питоша Плюс</b>${p.plus ? `<span class="plus-left">${p.plusDays > 3650 ? 'навсегда' : `ещё ${p.plusDays} ${days(p.plusDays)}`}</span>` : ''}</div>
         <ul class="perks"><li>❤️ Безлимитные жизни — учись сколько хочешь</li><li>🧪 Песочница — пиши любой код в телефоне</li><li>🎨 Эксклюзивные темы оформления</li></ul>
         ${promo && promo.available ? `<button class="promo" data-buy="plus_promo"><b>🎁 Акция для первых 100: месяц за ${C.SHOP.plus_promo.stars} ⭐</b><small>Осталось мест: ${promo.left}</small></button>` : ''}
@@ -390,10 +422,117 @@
     });
   }
 
+  async function gemBuy(item) {
+    haptic();
+    const r = await api.gemBuy(item);
+    if (r.player) S.player = r.player;
+    if (r.error === 'no_gems') toast('Не хватает алмазов 💎 Проходи уроки и открывай сундуки!');
+    else if (r.error === 'full') toast('Все жизни и так на месте ❤️');
+    else if (r.error) toast('Не получилось, попробуй ещё раз');
+    else { haptic('ok'); toast(item === 'heart' ? '❤️ +1 жизнь!' : '🧊 Заморозка серии добавлена!'); }
+    render();
+  }
+
+  // ---------- Задания на день → сундуки ----------
+  const CHEST_ICO = { bronze: '🟫', silver: '⬜', gold: '🟨' };
+  function questsScreen() {
+    const st = S.player.quests;
+    if (!st) return '<div class="screen"><h2 class="title">Задания</h2><p class="note">Загружаю…</p></div>';
+    const chestBtn = (id, done, claimed, kind) => claimed ? '<span class="chest open">✅</span>'
+      : done ? `<button class="chest ready" data-quest="${id}">🎁<small>Открыть</small></button>` : `<span class="chest">${CHEST_ICO[kind]}🔒</span>`;
+    return `<div class="screen"><h2 class="title">Задания на сегодня</h2>
+      <p class="note" style="text-align:left;margin:-8px 0 12px">Новые задания — каждый день в полночь. За каждое — сундук с алмазами 💎</p>
+      ${st.list.map(q => `<div class="card quest ${q.done ? 'done' : ''}"><span class="q-ico">${q.ico}</span>
+        <div class="q-body"><b>${esc(q.title)}</b><div class="q-bar"><i style="width:${(q.have / q.target) * 100}%"></i><span>${q.have} / ${q.target}</span></div></div>
+        ${chestBtn(q.id, q.done, q.claimed, q.chest)}</div>`).join('')}
+      <div class="card quest final ${st.all.done ? 'done' : ''}"><span class="q-ico">🏆</span><div class="q-body"><b>Выполни все 3 задания</b>
+        <small>Большой золотой сундук: до 80 💎</small></div>${chestBtn('all', st.all.done, st.all.claimed, 'gold')}</div></div>`;
+  }
+  async function claimQuestChest(id) {
+    haptic();
+    const r = await api.questClaim(id);
+    if (r.player) S.player = r.player;
+    if (r.chest) { haptic('ok'); celebrate(); toast(`${CHEST_ICO[r.chest.chest]} Сундук открыт: +${r.chest.gems} 💎`); }
+    render();
+  }
+
+  // ---------- Друзья: приглашения и дружеские забеги ----------
+  function friendsScreen() {
+    if (!S.fr) { api.friends().then(r => { S.fr = r.error ? { friends: [], races: [] } : r; if (r.player) S.player = r.player; if (S.tab === 'friends') render(); }); return '<div class="screen"><h2 class="title">Друзья</h2><p class="note">Загружаю…</p></div>'; }
+    const F = S.fr, now = Date.now();
+    const left = iso => { const ms = new Date(iso) - now, h = Math.ceil(ms / 3600000); return h > 24 ? `${Math.ceil(h / 24)} ${days(Math.ceil(h / 24))}` : `${h} ч`; };
+    const active = new Set(F.races.filter(x => !x.finished).map(x => x.opponent.id));
+    const races = F.races.filter(x => !x.finished || !x.claimed);
+    return `<div class="screen"><h2 class="title">Друзья</h2>
+      <div class="card invite"><b>🎁 Пригласи друга — получи неделю Плюса</b>
+        <small>Когда друг по твоей ссылке что-нибудь купит или позанимается ${C.REF_DAYS} дней, тебе — 7 дней Питоша Плюс. Друзей можно звать сколько угодно!${F.refRewards ? ` Уже получено: ${F.refRewards} 👑` : ''}</small>
+        <button class="big" data-act="invite">📨 Пригласить друга</button></div>
+      <div class="card add-friend"><b>Добавить по коду</b><small>Твой код: <button class="code-chip" data-act="copy-code" data-code="${esc(F.code || '')}">${esc(F.code || '…')} 📋</button></small>
+        <form id="friend-form" class="friend-row"><input class="answer-input" id="friend-code" maxlength="12" autocomplete="off" autocapitalize="characters" placeholder="Код друга"><button type="button" class="price" data-act="friend-add">Добавить</button></form></div>
+      ${races.length ? `<h3 class="sub">🏁 Забеги</h3>${races.map(x => `<div class="card race ${x.finished ? x.result : ''}">
+        <div class="race-head">${avatarHtml(x.opponent.avatar)}<b>Ты vs ${esc(x.opponent.name)}</b><small>${x.finished ? 'финиш' : 'ещё ' + left(x.endsAt)}</small></div>
+        <div class="race-bars"><div><span>Ты</span><i style="width:${Math.min(100, (x.mine / Math.max(1, x.mine, x.theirs)) * 100)}%"></i><b>${x.mine} XP</b></div>
+          <div><span>${esc(x.opponent.name)}</span><i class="them" style="width:${Math.min(100, (x.theirs / Math.max(1, x.mine, x.theirs)) * 100)}%"></i><b>${x.theirs} XP</b></div></div>
+        ${x.finished ? `<button class="big ${x.result === 'win' ? 'green' : ''}" data-race-claim="${x.id}">${x.result === 'win' ? '🏆 Победа! Забрать сундук' : x.result === 'draw' ? '🤝 Ничья — забрать сундук' : '💪 Почти! Забрать утешительный приз'}</button>` : ''}</div>`).join('')}` : ''}
+      <h3 class="sub">👥 Мои друзья · ${F.friends.length}</h3>
+      ${F.friends.length ? `<div class="card">${F.friends.map(f => `<div class="row"><div class="row-av">${avatarHtml(f.avatar)}</div>
+        <div class="who">${esc(f.name)}<small class="sub-line">⭐ ${f.xp} XP · 🔥 ${f.streak}</small></div>
+        <button class="price small" data-race="${f.id}" ${active.has(f.id) ? 'disabled' : ''}>${active.has(f.id) ? 'Идёт забег' : '🏁 Забег'}</button>
+        <button class="x-btn" data-unfriend="${f.id}" aria-label="Удалить из друзей">✕</button></div>`).join('')}</div>`
+        : '<p class="note">Пока никого. Пригласи друга по ссылке или добавь по коду — и вызови на забег: кто наберёт больше XP за 3 дня, получит сундук 💎</p>'}</div>`;
+  }
+  async function addFriend() {
+    const inp = document.getElementById('friend-code');
+    const code = inp ? inp.value : '';
+    if (!C.cleanCode(code)) return toast('Введи код друга');
+    const r = await api.friendAdd(code);
+    const msg = { bad_code: 'Код слишком короткий', not_found: 'Нет ученика с таким кодом 🤔', self: 'Это твой собственный код 🙂' }[r.error];
+    if (r.error) { haptic('bad'); return toast(msg || 'Не получилось добавить'); }
+    haptic('ok'); toast(`🤝 ${r.name} теперь в друзьях!`);
+    S.fr = null; render();
+  }
+  async function removeFriend(id) {
+    const go = async () => { await api.friendRemove(id); S.fr = null; render(); };
+    if (tg && tg.showConfirm) tg.showConfirm('Удалить из друзей?', ok => { if (ok) go(); }); else if (confirm('Удалить из друзей?')) go();
+  }
+  async function startRace(id) {
+    haptic();
+    const r = await api.raceStart(id);
+    if (r.error === 'already') toast('С этим другом уже идёт забег');
+    else if (r.error) toast('Не получилось начать забег');
+    else { toast(`🏁 Забег начался! ${C.RACE_DAYS} дня — кто наберёт больше XP`); celebrate(); }
+    S.fr = null; render();
+  }
+  async function claimRace(id) {
+    const r = await api.raceClaim(id);
+    if (r.player) S.player = r.player;
+    if (r.gems) { haptic('ok'); celebrate(); toast(`🎁 +${r.gems} 💎`); } else toast('Приз уже получен');
+    S.fr = null; render();
+  }
+
+  // ---------- Ещё: настройки ----------
+  function moreScreen() {
+    const vibro = store.get('pitosha-vibro') !== 'off';
+    return `<div class="screen"><h2 class="title">Ещё</h2>
+      <h3 class="sub">🎨 Тема</h3>
+      <div class="themes">${THEMES.map(t => `<button class="theme-btn ${document.documentElement.dataset.theme === t.id ? 'sel' : ''}" data-theme="${t.id}"><span>${t.ico}</span>${t.name}${t.plus && !canPlus() ? ' 👑' : ''}</button>`).join('')}</div>
+      <h3 class="sub">⚙️ Настройки</h3>
+      <div class="card menu">
+        <button class="menu-row" data-act="vibro"><span>📳 Вибрация</span><i class="switch ${vibro ? 'on' : ''}"></i></button>
+        <button class="menu-row" data-act="sandbox"><span>🧪 Песочница${canPlus() ? '' : ' 👑'}</span><i>›</i></button>
+        <button class="menu-row" data-tab="top" data-top-mode="arena"><span>⚔️ Арена</span><i>›</i></button>
+        <button class="menu-row" data-act="invite"><span>📨 Пригласить друга</span><i>›</i></button>
+        <button class="menu-row" data-act="share"><span>📤 Поделиться успехами</span><i>›</i></button>
+        <button class="menu-row" data-act="edit-profile"><span>✏️ Имя и аватарка</span><i>›</i></button>
+      </div>
+      <p class="note">Проблема с покупкой? Напиши боту /paysupport</p>
+      ${api.demo ? '<p class="note">Демо-режим: прогресс хранится в этом браузере.</p><button class="big ghost" data-act="reset">Сбросить прогресс</button>' : ''}</div>`;
+  }
+
   // ---------- Арена: 5 вопросов за 60 секунд, раз в день ----------
   const secs = ms => (ms / 1000).toFixed(1).replace('.', ',');
   function arenaList() {
-    if (!S.arenaTop) { api.arenaTop().then(r => { S.arenaTop = r.top || []; if (S.tab === 'arena' && S.view === 'tabs') render(); }); return '<p class="note">Загружаю…</p>'; }
+    if (!S.arenaTop) { api.arenaTop().then(r => { S.arenaTop = r.top || []; if (S.tab === 'top' && S.view === 'tabs') render(); }); return '<p class="note">Загружаю…</p>'; }
     if (!S.arenaTop.length) return '<p class="note">Сегодня ещё никто не играл — будь первым!</p>';
     const medals = ['🥇', '🥈', '🥉'];
     return S.arenaTop.map((u, i) => `<div class="row ${u.me ? 'me' : ''}"><div class="place">${medals[i] || i + 1}</div><div class="row-av">${avatarHtml(u.avatar || '🐍')}</div>
@@ -402,13 +541,12 @@
   function arenaScreen() {
     const p = S.player, a = p.arena;
     const played = a && a.done && a.day === p.today;
-    return `<div class="screen"><h2 class="title">⚔️ Арена</h2>
-      ${played ? `<div class="card arena-card"><b>Твой результат сегодня</b><div class="arena-score">${a.correct}/${C.ARENA_SIZE}<small>за ${secs(a.ms)} с</small></div>
+    return `${played ? `<div class="card arena-card"><b>Твой результат сегодня</b><div class="arena-score">${a.correct}/${C.ARENA_SIZE}<small>за ${secs(a.ms)} с</small></div>
           <p class="note">Новая арена — завтра. Те же вопросы сегодня у всех!</p></div>`
         : `<div class="card arena-card"><b>${C.ARENA_SIZE} вопросов «что выведет код?» за 60 секунд</b>
           <p class="note">Одна попытка в день, вопросы у всех одинаковые. Побеждает тот, кто ответит верно на больше вопросов, а при равенстве — быстрее. За каждый верный ответ +2 XP.</p>
           <button class="big" data-act="arena-go">⚔️ Начать</button></div>`}
-      <h3 class="sub">🏆 Топ-10 сегодня</h3><div class="card">${arenaList()}</div></div>`;
+      <h3 class="sub">🏆 Топ-10 сегодня</h3><div class="card">${arenaList()}</div>`;
   }
   async function startArena() {
     haptic();
@@ -459,7 +597,7 @@
     while (A.answers.length < A.qs.length) A.answers.push(null); // не успел — ответ не засчитан
     const r = await api.arenaFinish(A.answers);
     if (r.player) S.player = r.player;
-    S.arena = null; S.arenaTop = null; S.view = 'tabs'; S.tab = 'arena';
+    S.arena = null; S.arenaTop = null; S.view = 'tabs'; S.tab = 'top'; S.topMode = 'arena';
     render();
     if (r.score) {
       toast(`⚔️ ${r.score.correct}/${C.ARENA_SIZE} за ${secs(r.score.ms)} с · +${r.score.xp} XP`);
@@ -483,8 +621,61 @@
       <textarea class="editor" id="sb-editor" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off">${esc(B.code)}</textarea>
       <label class="stdin-label">⌨️ Ввод для input() (каждое значение с новой строки):</label>
       <textarea class="stdin" id="sb-stdin" spellcheck="false" rows="2">${esc(B.stdin)}</textarea>
-      <div class="code-tools"><button class="tool" data-act="sb-run">${B.running ? '⏳ Запуск…' : '▶️ Запустить'}</button></div>
-      ${B.out ? `<div class="console">${B.out}</div>` : ''}</div>`;
+      <div class="code-tools"><button class="tool" data-act="sb-run">${B.running ? '⏳ Запуск…' : '▶️ Запустить'}</button>
+        <button class="tool" data-act="sb-save">💾 Сохранить и поделиться</button></div>
+      ${B.out ? `<div class="console">${B.out}</div>` : ''}
+      <h3 class="sub">📂 Мои программы</h3>${snippetList()}
+      <button class="big ghost" data-act="home">На главную</button></div>`;
+  }
+  function snippetList() {
+    if (!S.snips) { api.snippets().then(r => { S.snips = r.list || []; if (S.view === 'sandbox') render(); }); return '<p class="note">Загружаю…</p>'; }
+    if (!S.snips.length) return '<p class="note">Пока пусто. Нажми «Сохранить» — программа появится здесь, а ссылкой можно поделиться с друзьями.</p>';
+    return `<div class="card">${S.snips.map(s => `<div class="row"><code class="snip-prev">${esc(s.preview || '(пусто)')}</code>
+      <button class="price small" data-snip="${esc(s.id)}">Открыть</button><button class="price small" data-snip-share="${esc(s.link)}">📤</button></div>`).join('')}</div>`;
+  }
+  async function saveSnippet() {
+    const B = S.sandbox, ed = document.getElementById('sb-editor');
+    if (ed) B.code = ed.value;
+    if (!B.code.trim()) return toast('Сначала напиши код ✍️');
+    const r = await api.snippetSave(B.code);
+    if (r.error) return toast({ need_plus: '💾 Сохранение — в Питоша Плюс', limit: 'Слишком много сохранений за сутки', too_long: 'Слишком длинная программа' }[r.error] || 'Не получилось сохранить');
+    haptic('ok'); S.snips = null;
+    toast('💾 Сохранено! Отправь ссылку другу');
+    render();
+    shareLink(r.link, 'Посмотри мою программу на Python 🐍 Её можно запустить прямо в Telegram!');
+  }
+  // Чужой (или свой) сохранённый код по ссылке: посмотреть и запустить может любой
+  async function openSnippet(id) {
+    const r = await api.snippetGet(id);
+    if (r.error) return toast('Этот код не найден 😔');
+    S.snip = { id: r.id, code: r.code, author: r.author, mine: r.mine, stdin: '', out: '', running: false };
+    S.view = 'snippet';
+    window.PY.preload();
+    render(); window.scrollTo(0, 0);
+  }
+  function snippetScreen() {
+    const N = S.snip;
+    return `<div class="screen" style="padding-top:14px"><h2 class="title">🐍 Программа</h2>
+      <p class="note" style="text-align:left;margin-top:-8px">Автор: ${esc(N.author)}</p>
+      <pre class="code">${highlight(N.code)}</pre>
+      <label class="stdin-label">⌨️ Ввод для input() (каждое значение с новой строки):</label>
+      <textarea class="stdin" id="snip-stdin" spellcheck="false" rows="2">${esc(N.stdin)}</textarea>
+      <div class="code-tools"><button class="tool" data-act="snip-run">${N.running ? '⏳ Запуск…' : '▶️ Запустить'}</button>
+        <button class="tool" data-act="snip-to-sandbox">🧪 В песочницу${canPlus() ? '' : ' 👑'}</button>
+        <button class="tool" data-snip-share="https://t.me/pythonshkabot?start=code_${esc(N.id)}">📤</button></div>
+      ${N.out ? `<div class="console">${N.out}</div>` : ''}
+      <button class="big ghost" data-act="home">На главную</button></div>`;
+  }
+  async function runSnippet() {
+    const N = S.snip;
+    if (N.running) return;
+    const si = document.getElementById('snip-stdin'); if (si) N.stdin = si.value;
+    N.running = true; N.out = !window.PY.isWarm() ? '⏳ Загружаю Python (только в первый раз, ~10 секунд)…' : ''; render();
+    const r = await window.PY.run(N.code, [{ run: true, stdin: N.stdin }]);
+    N.running = false;
+    if (r.error) N.out = pyFail(r);
+    else { const t = r.results[0]; N.out = `<div class="console-title">Вывод программы:</div><pre>${esc(t.printed || '(ничего не напечатано)')}</pre>` + (t.err ? `<div class="console-err">❌ ${esc(t.err)}</div>${tipHtml(explainError(t.err))}` : ''); }
+    render();
   }
   async function runSandbox() {
     const B = S.sandbox;
@@ -790,6 +981,7 @@
       <h1>${f.perfect ? 'Идеально! 🎉' : 'Урок пройден! 🎉'}</h1><p>«${esc(f.title)}»</p>
       <div class="rewards">
         <div class="reward y"><small>Опыт</small><b>+${f.xp}</b></div>
+        <div class="reward b"><small>Алмазы</small><b>💎 +${f.gems || 0}</b></div>
         <div class="reward o"><small>Серия</small><b>🔥 ${f.streak}</b></div>
         <div class="reward g"><small>Точность</small><b>${acc}%</b></div>
       </div>
@@ -848,8 +1040,10 @@
     else if (S.view === 'placement') html = placementScreen();
     else if (S.view === 'arena-play') html = arenaPlayScreen();
     else if (S.view === 'sandbox') html = sandboxScreen();
-    else html = topbar() + ({ learn: learnScreen, arena: arenaScreen, top: topScreen, shop: shopScreen, me: meScreen }[S.tab])() + tabs();
+    else if (S.view === 'snippet') html = snippetScreen();
+    else html = topbar() + ({ learn: learnScreen, quests: questsScreen, top: topScreen, friends: friendsScreen, shop: shopScreen, me: meScreen, more: moreScreen }[S.tab] || learnScreen)() + tabs();
     $app.innerHTML = html;
+    document.body.classList.toggle('with-nav', S.view === 'tabs'); // боковая панель на компьютере — только на вкладках
     const noBack = S.view === 'tabs' || S.view === 'onboard' || S.view === 'arena-play' || (S.view === 'register' && S.reg.first) || (S.view === 'placement' && S.P && S.P.result);
     if (tg && tg.BackButton) { if (noBack) tg.BackButton.hide(); else tg.BackButton.show(); }
     const editor = document.getElementById('editor');
@@ -859,6 +1053,8 @@
     if (S.view === 'arena-play') tickArena();
     const regInput = document.getElementById('reg-name');
     if (regInput) regInput.addEventListener('keydown', e => { if (e.key === 'Enter') saveProfile(); });
+    const friendForm = document.getElementById('friend-form');
+    if (friendForm) friendForm.addEventListener('submit', e => { e.preventDefault(); addFriend(); });
     const photoInput = document.getElementById('photo-input');
     if (photoInput) photoInput.addEventListener('change', () => onPhotoPicked(photoInput));
     const input = document.getElementById('answer');
@@ -894,7 +1090,23 @@
     const t = e.target.closest('button');
     if (!t || t.disabled) return;
     const d = t.dataset;
-    if (d.tab) { S.tab = d.tab; S.view = 'tabs'; haptic(); if (d.tab === 'top') S.top = null; if (d.tab === 'arena') S.arenaTop = null; render(); window.scrollTo(0, 0); }
+    if (d.tab) { S.tab = d.tab; S.view = 'tabs'; haptic(); if (d.shopSide) S.shopSide = d.shopSide; if (d.topMode) S.topMode = d.topMode; if (d.tab === 'top') { S.top = null; S.arenaTop = null; } if (d.tab === 'friends') S.fr = null; render(); window.scrollTo(0, 0); }
+    else if (d.topMode) { S.topMode = d.topMode; S.arenaTop = null; S.top = null; haptic(); render(); }
+    else if (d.shopSide) { S.shopSide = d.shopSide; haptic(); render(); }
+    else if (d.gemBuy) gemBuy(d.gemBuy);
+    else if (d.quest) claimQuestChest(d.quest);
+    else if (d.race) startRace(Number(d.race));
+    else if (d.raceClaim) claimRace(Number(d.raceClaim));
+    else if (d.unfriend) removeFriend(Number(d.unfriend));
+    else if (d.snip) openSnippet(d.snip);
+    else if (d.snipShare) shareLink(d.snipShare, 'Посмотри мою программу на Python 🐍');
+    else if (d.act === 'friend-add') addFriend();
+    else if (d.act === 'invite') shareLink(S.player.refLink, 'Учи Python вместе со мной в Питоше 🐍 По моей ссылке — сразу в друзья!');
+    else if (d.act === 'copy-code') copyText(d.code, 'Код скопирован');
+    else if (d.act === 'sb-save') saveSnippet();
+    else if (d.act === 'snip-to-sandbox') { if (!canPlus()) { toast('🧪 Песочница — в Питоше Плюс'); S.tab = 'shop'; S.view = 'tabs'; render(); } else { S.sandbox = { code: S.snip.code, stdin: '', out: '', running: false }; store.set('pitosha-sandbox', S.snip.code); S.view = 'sandbox'; render(); } }
+    else if (d.act === 'snip-run') runSnippet();
+    else if (d.act === 'vibro') { store.set('pitosha-vibro', store.get('pitosha-vibro') === 'off' ? 'on' : 'off'); haptic(); render(); }
     else if (d.place !== undefined) placementAnswer(d.place);
     else if (d.arenaOpt !== undefined) arenaAnswer(Number(d.arenaOpt));
     else if (d.theme) pickTheme(d.theme);
