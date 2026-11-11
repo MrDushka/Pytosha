@@ -65,16 +65,55 @@
     S.reg = { first, avatar: p.avatar || C.AVATARS[0], name: p.name || (C.cleanName(tgName).ok ? C.cleanName(tgName).name : ''), error: '' };
     S.view = 'register';
   }
+  // Аватарка: эмодзи или своё фото (data:image/… — проверено C.isPhoto, поэтому безопасно для src)
+  function avatarHtml(a) {
+    if (C.isPhoto(a)) return `<img class="av-img" src="${a}" alt="">`;
+    return esc(C.AVATARS.includes(a) ? a : '🐍');
+  }
+  // Фото с телефона/компьютера → квадрат 128×128 по центру → JPEG поменьше
+  async function photoToAvatar(file) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((ok, fail) => { const i = new Image(); i.onload = () => ok(i); i.onerror = fail; i.src = url; });
+      for (const [size, quality] of [[128, 0.82], [128, 0.65], [96, 0.6], [80, 0.5]]) {
+        const cv = document.createElement('canvas');
+        cv.width = cv.height = size;
+        const side = Math.min(img.naturalWidth, img.naturalHeight);
+        cv.getContext('2d').drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, size, size);
+        const data = cv.toDataURL('image/jpeg', quality);
+        if (C.isPhoto(data)) return data;
+      }
+      return null;
+    } finally { URL.revokeObjectURL(url); }
+  }
+  async function onPhotoPicked(input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const nameInput = document.getElementById('reg-name');
+    if (nameInput) S.reg.name = nameInput.value;
+    if (!/^image\//.test(file.type || 'image/')) { toast('Это не картинка 🙈'); return; }
+    if (file.size > 15 * 1024 * 1024) { toast('Слишком большой файл — выбери фото поменьше'); return; }
+    let data = null;
+    try { data = await photoToAvatar(file); } catch (e) { data = null; }
+    if (!data) { toast('Не получилось открыть фото, попробуй другое'); return; }
+    S.reg.avatar = data;
+    haptic('ok');
+    render();
+  }
+
   function registerScreen() {
     const R = S.reg;
+    const own = C.isPhoto(R.avatar);
     return `<div class="center reg">
-      <div class="reg-avatar">${esc(R.avatar)}</div>
+      <div class="reg-avatar">${avatarHtml(R.avatar)}</div>
       <h1>${R.first ? 'Давай знакомиться!' : 'Твой профиль'}</h1>
       <p>${R.first ? 'Выбери аватарку и имя — их увидят все в таблице лидеров 🏆' : 'Аватарка и имя видны в таблице лидеров'}</p>
+      <label class="photo-btn ${own ? 'sel' : ''}">📷 ${own ? 'Выбрать другое фото' : 'Своё фото с телефона или компьютера'}
+        <input type="file" id="photo-input" accept="image/*" hidden></label>
       <div class="avatar-grid">${C.AVATARS.map(a => `<button class="av ${a === R.avatar ? 'sel' : ''}" data-avatar="${a}">${a}</button>`).join('')}</div>
       <input class="answer-input name-input" id="reg-name" maxlength="16" autocomplete="off" placeholder="Твоё имя или ник" value="${esc(R.name)}">
       <div class="reg-error">${esc(R.error || '')}</div>
-      <p class="note">Не пиши фамилию, школу и адрес — это видят все.</p>
+      <p class="note">Не пиши фамилию, школу и адрес — это видят все. Фото тоже видно всем: лучше не ставь своё лицо, выбери картинку или рисунок.</p>
       <div class="bottom"><div class="bottom-inner">
         <button class="big" data-act="save-profile">${R.first ? 'Начать учиться' : 'Сохранить'}</button>
         ${R.first ? '' : '<button class="big ghost" data-act="home">Отмена</button>'}
@@ -145,7 +184,7 @@
     const lv = C.level(p.xp), inLv = C.levelProgress(p.xp);
     const doneCount = LESSONS.filter(l => p.done[l.id]).length;
     return `<div class="screen"><h2 class="title">Профиль</h2>
-      <div class="card"><div class="profile-head"><div class="me-avatar">${esc((p.profile && p.profile.avatar) || '🐍')}</div><div style="flex:1"><b>${esc(p.name || 'Ученик')}</b> <button class="edit-btn" data-act="edit-profile">✏️</button>
+      <div class="card"><div class="profile-head"><div class="me-avatar">${avatarHtml((p.profile && p.profile.avatar) || '🐍')}</div><div style="flex:1"><b>${esc(p.name || 'Ученик')}</b> <button class="edit-btn" data-act="edit-profile">✏️</button>
         <div style="color:var(--muted);font-weight:800">Уровень ${lv} · ${inLv}/${C.XP_PER_LEVEL} XP</div>
         <div class="lvl-bar"><i style="width:${(inLv / C.XP_PER_LEVEL) * 100}%"></i></div></div></div></div>
       <div class="grid2">
@@ -166,7 +205,7 @@
     if (!S.top) { api.top().then(r => { S.top = r.top || []; if (S.tab === 'top') render(); }); return '<div class="screen"><h2 class="title">Рейтинг</h2><p class="note">Загружаю…</p></div>'; }
     const medals = ['🥇', '🥈', '🥉'];
     return `<div class="screen"><h2 class="title">Рейтинг</h2><div class="card">${S.top.length ? S.top.map((u, i) =>
-      `<div class="row ${u.me ? 'me' : ''}"><div class="place">${medals[i] || u.place || i + 1}</div><div class="row-av">${esc(u.avatar || '🐍')}</div><div class="who">${esc(u.name)}${u.me ? ' (ты)' : ''}</div><div class="pts">${u.xp} XP</div></div>`).join('')
+      `<div class="row ${u.me ? 'me' : ''}"><div class="place">${medals[i] || u.place || i + 1}</div><div class="row-av">${avatarHtml(u.avatar || '🐍')}</div><div class="who">${esc(u.name)}${u.me ? ' (ты)' : ''}</div><div class="pts">${u.xp} XP</div></div>`).join('')
       : '<p class="note">Пока пусто — пройди урок и стань первым!</p>'}</div>
       <p class="note">Опыт дают за уроки. Без ошибок — бонус!</p></div>`;
   }
@@ -440,6 +479,8 @@
     if (editor) setupEditor(editor);
     const regInput = document.getElementById('reg-name');
     if (regInput) regInput.addEventListener('keydown', e => { if (e.key === 'Enter') saveProfile(); });
+    const photoInput = document.getElementById('photo-input');
+    if (photoInput) photoInput.addEventListener('change', () => onPhotoPicked(photoInput));
     const input = document.getElementById('answer');
     if (input && !S.L.checked) {
       input.focus();

@@ -119,12 +119,24 @@
     if (BAD.some(b => flat.includes(b.replace(/ё/g, 'е')))) return { ok: false, error: 'Такое имя нельзя — придумай другое' };
     return { ok: true, name };
   }
-  const cleanAvatar = a => (AVATARS.includes(a) ? a : AVATARS[0]);
+  // Своё фото: маленькая картинка data:image/…;base64 (приложение сжимает её до 128×128).
+  // Проверяем формат, размер и «подпись» файла — чтобы под видом картинки не прислали что-то другое.
+  const PHOTO_MAX = 20000; // символов data URL ≈ 15 КБ
+  const PHOTO_MAGIC = { jpeg: [[0, '\xFF\xD8\xFF']], png: [[0, '\x89PNG']], webp: [[0, 'RIFF'], [8, 'WEBP']] };
+  function isPhoto(a) {
+    if (typeof a !== 'string' || a.length > PHOTO_MAX) return false;
+    const m = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/.exec(a);
+    if (!m || m[2].length % 4 !== 0) return false;
+    let head;
+    try { head = atob(m[2].slice(0, 16)); } catch (e) { return false; }
+    return PHOTO_MAGIC[m[1]].every(([at, sig]) => head.slice(at, at + sig.length) === sig);
+  }
+  const cleanAvatar = a => (AVATARS.includes(a) || isPhoto(a) ? a : AVATARS[0]);
 
   const api = {
     MAX_HEARTS, HEART_MIN, XP_PER_LEVEL, mskDay, prevDay, newPlayer, hasPlus,
     refreshHearts, loseHeart, nextHeartMs, currentStreak, bumpStreak, level, levelProgress, lessonXp,
-    isUnlocked, norm, checkAnswer, rightAnswer, finishLesson, AVATARS, cleanName, cleanAvatar,
+    isUnlocked, norm, checkAnswer, rightAnswer, finishLesson, AVATARS, cleanName, cleanAvatar, isPhoto, PHOTO_MAX,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.CORE = api;
 })(typeof self !== 'undefined' ? self : this);
