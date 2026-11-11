@@ -2,7 +2,7 @@
 // Всё — чистые функции над объектом ученика: { xp, hearts, heartsAt, streak, bestStreak, lastDay, done }.
 (function (root) {
   const MAX_HEARTS = 5;
-  const HEART_MIN = 48;            // новая жизнь каждые 48 минут (5 жизней ≈ 4 часа)
+  const HEART_MIN = 30;            // новая жизнь каждые 30 минут (5 жизней ≈ 2,5 часа)
   const XP_PER_LEVEL = 50;
 
   const pad = n => String(n).padStart(2, '0');
@@ -92,16 +92,161 @@
     return Number(answer) === 0; // для кнопок: индекс исходного варианта; правильный — options[0]
   }
 
-  // Завершить урок: ответы → опыт, серия, отметка «пройден»
+  // Завершить урок: ответы → опыт, серия, отметка «пройден», ачивки
   function finishLesson(p, lesson, { correct, mistakes }, now) {
-    const firstTime = !p.done[lesson.id];
+    const firstTime = !p.done[lesson.id] || !!p.done[lesson.id].skipped;
     const xp = lessonXp({ firstTime, correct, mistakes });
     const lvlBefore = level(p.xp);
     p.xp += xp;
     const prev = p.done[lesson.id];
-    p.done[lesson.id] = { best: prev ? Math.min(prev.best, mistakes) : mistakes, times: (prev ? prev.times : 0) + 1 };
+    p.done[lesson.id] = { best: prev && !prev.skipped ? Math.min(prev.best, mistakes) : mistakes, times: (prev ? prev.times : 0) + 1 };
+    // «Неделя без ошибок»: дни подряд, когда все уроки пройдены без ошибок
+    const today = mskDay(now);
+    if (mistakes > 0) { p.dirtyDay = today; p.cleanRun = 0; }
+    else if (p.dirtyDay !== today && p.cleanRunDay !== today) {
+      p.cleanRun = (p.cleanRunDay === prevDay(today) ? p.cleanRun || 0 : 0) + 1;
+      p.cleanRunDay = today;
+    }
     const streakUp = bumpStreak(p, now);
-    return { xp, firstTime, perfect: mistakes === 0, streak: p.streak, streakUp, levelUp: level(p.xp) > lvlBefore, level: level(p.xp) };
+    const ach = checkAchievements(p, now);
+    return { xp, firstTime, perfect: mistakes === 0, streak: p.streak, streakUp, levelUp: level(p.xp) > lvlBefore, level: level(p.xp), ach };
+  }
+  // Учёт ответа: решённые задачи с кодом нужны для ачивок
+  function recordAnswer(p, q, correct) {
+    if (correct && q.type === 'code') p.codeSolved = (p.codeSolved || 0) + 1;
+  }
+
+  // ---------- Ачивки ----------
+  const doneCount = p => Object.values(p.done || {}).filter(d => !d.skipped).length;
+  const ACHIEVEMENTS = [
+    { id: 'first_lesson', ico: '🎉', title: 'Первый урок', desc: 'Пройди первый урок', test: p => doneCount(p) >= 1 },
+    { id: 'first_code', ico: '💻', title: 'Первый код', desc: 'Реши первую задачу с кодом', test: p => (p.codeSolved || 0) >= 1 },
+    { id: 'perfect', ico: '✨', title: 'Без ошибок', desc: 'Пройди урок без единой ошибки', test: p => Object.values(p.done || {}).some(d => d.best === 0 && !d.skipped) },
+    { id: 'streak3', ico: '🔥', title: 'Разогрев', desc: 'Учись 3 дня подряд', test: p => (p.bestStreak || 0) >= 3 },
+    { id: 'lessons10', ico: '📚', title: 'Книжный червь', desc: 'Пройди 10 уроков', test: p => doneCount(p) >= 10 },
+    { id: 'streak7', ico: '📅', title: 'Неделя подряд', desc: 'Учись 7 дней подряд', test: p => (p.bestStreak || 0) >= 7 },
+    { id: 'clean_week', ico: '💎', title: 'Неделя без ошибок', desc: '7 дней подряд — все уроки без ошибок', test: p => (p.cleanRun || 0) >= 7 },
+    { id: 'code25', ico: '⌨️', title: 'Кодер', desc: 'Реши 25 задач с кодом', test: p => (p.codeSolved || 0) >= 25 },
+    { id: 'level10', ico: '⭐', title: 'Уровень 10', desc: 'Набери 10-й уровень', test: p => level(p.xp) >= 10 },
+    { id: 'lessons50', ico: '🎓', title: 'Полсотни', desc: 'Пройди 50 уроков', test: p => doneCount(p) >= 50 },
+    { id: 'arena', ico: '⚔️', title: 'Гладиатор', desc: 'Сыграй на арене', test: p => (p.arenaPlayed || 0) >= 1 },
+    { id: 'arena_perfect', ico: '⚡', title: 'Молния', desc: 'Ответь на арене на все вопросы верно', test: p => (p.arenaBest || 0) >= ARENA_SIZE },
+    { id: 'streak30', ico: '🏆', title: 'Месяц подряд', desc: 'Учись 30 дней подряд', test: p => (p.bestStreak || 0) >= 30 },
+    { id: 'lessons100', ico: '🏛️', title: 'Сотня', desc: 'Пройди 100 уроков', test: p => doneCount(p) >= 100 },
+    { id: 'code100', ico: '🤖', title: 'Машина кода', desc: 'Реши 100 задач с кодом', test: p => (p.codeSolved || 0) >= 100 },
+  ];
+  // Новые ачивки: отмечаем в p.ach и возвращаем список для праздника на экране
+  function checkAchievements(p, now) {
+    p.ach = p.ach || {};
+    const got = [];
+    for (const a of ACHIEVEMENTS) {
+      if (!p.ach[a.id] && a.test(p)) { p.ach[a.id] = mskDay(now); got.push({ id: a.id, ico: a.ico, title: a.title }); }
+    }
+    return got;
+  }
+
+  // ---------- Ежедневный бонус ----------
+  // Заходи каждый день: награда растёт 7 дней по кругу, на 7-й день — заморозка серии
+  const DAILY_XP = [5, 5, 10, 10, 15, 15, 30];
+  const dailyAvailable = (p, now) => p.dailyDay !== mskDay(now);
+  // Какой день по счёту будет, если забрать бонус сейчас (1…7)
+  function dailyNextDay(p, now) {
+    const run = p.dailyDay === prevDay(mskDay(now)) ? (p.dailyRun || 0) + 1 : 1;
+    return ((run - 1) % 7) + 1;
+  }
+  function claimDaily(p, now) {
+    const today = mskDay(now);
+    if (p.dailyDay === today) return null;
+    p.dailyRun = p.dailyDay === prevDay(today) ? (p.dailyRun || 0) + 1 : 1;
+    p.dailyDay = today;
+    const day = ((p.dailyRun - 1) % 7) + 1;
+    const xp = DAILY_XP[day - 1];
+    p.xp += xp;
+    const freeze = day === 7;
+    if (freeze) p.freezes = (p.freezes || 0) + 1;
+    return { day, xp, freeze, ach: checkAchievements(p, now) };
+  }
+
+  // ---------- Магазин и Плюс ----------
+  const SHOP = {
+    hearts: { title: '❤️ Все жизни сразу', description: 'Мгновенно восстанавливает все 5 жизней', stars: 10 },
+    freeze: { title: '🧊 Заморозка серии', description: 'Пропустишь один день — серия не сгорит', stars: 15 },
+    plus_week: { title: '👑 Питоша Плюс на неделю', description: 'Безлимит жизней, песочница и темы на 7 дней', stars: 25, plusDays: 7 },
+    plus: { title: '👑 Питоша Плюс на месяц', description: 'Безлимит жизней, песочница и темы на 30 дней', stars: 75, plusDays: 30 },
+    plus_year: { title: '👑 Питоша Плюс на год', description: 'Безлимит жизней, песочница и темы на 365 дней', stars: 499, plusDays: 365 },
+    plus_promo: { title: '🎁 Плюс на месяц — акция', description: 'Для первых 100 учеников: месяц Плюса со скидкой', stars: 50, plusDays: 30 },
+  };
+  const PROMO_LIMIT = 100;
+  function applyItem(p, item, now) {
+    const it = SHOP[item];
+    if (!it) return false;
+    if (item === 'hearts') { p.hearts = MAX_HEARTS; p.heartsAt = null; }
+    if (item === 'freeze') p.freezes = (p.freezes || 0) + 1;
+    if (it.plusDays) {
+      const from = hasPlus(p, now) ? new Date(p.plusUntil) : now;
+      p.plusUntil = new Date(from.getTime() + it.plusDays * 86400000).toISOString();
+      p.hearts = MAX_HEARTS; p.heartsAt = null;
+      if (item === 'plus_promo') p.promoUsed = true;
+    }
+    return true;
+  }
+  const plusDaysLeft = (p, now) => (hasPlus(p, now) ? Math.ceil((new Date(p.plusUntil) - now) / 86400000) : 0);
+
+  // ---------- Вступительный тест: «знаю основы» ----------
+  // По одному вопросу «что выведет код» из первых PLACEMENT_UNITS разделов. Пропускаем разделы,
+  // на которые ответил верно подряд с самого начала (угадать подряд много — трудно).
+  const PLACEMENT_UNITS = 8;
+  function placementQuestions(units) {
+    return units.slice(0, PLACEMENT_UNITS).map(u => {
+      for (const l of u.lessons) {
+        const q = l.questions.find(x => x.type === 'output' && x.options);
+        if (q) return { unit: u.id, lesson: l.id, qi: l.questions.indexOf(q), q };
+      }
+      return null;
+    }).filter(Boolean);
+  }
+  function applyPlacement(p, units, answers) {
+    if (p.placed || doneCount(p) > 0) return { skipped: 0 };
+    const qs = placementQuestions(units);
+    let k = 0;
+    while (k < qs.length && answers && Number(answers[k]) === 0 && answers[k] !== null) k++;
+    for (const u of units.slice(0, k)) for (const l of u.lessons) if (!p.done[l.id]) p.done[l.id] = { best: 0, times: 0, skipped: true };
+    p.placed = true;
+    return { skipped: k };
+  }
+
+  // ---------- Арена: 5 вопросов за 60 секунд, у всех в этот день одни и те же ----------
+  const ARENA_SIZE = 5;
+  const ARENA_MS = 60000;
+  function arenaQuestions(lessons, day) {
+    const basics = new Set(['u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8', 'u9', 'u10', 'u11']);
+    const pool = [];
+    for (const l of lessons) {
+      if (!basics.has(l.unit)) continue;
+      l.questions.forEach((q, qi) => { if (q.type === 'output' && q.options && q.code) pool.push({ lesson: l.id, qi, q }); });
+    }
+    let seed = 0;
+    for (const ch of 'arena:' + day) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) >>> 0; return seed / 4294967296; };
+    const out = [], used = new Set();
+    while (out.length < Math.min(ARENA_SIZE, pool.length)) {
+      const k = Math.floor(rnd() * pool.length);
+      if (!used.has(k)) { used.add(k); out.push(pool[k]); }
+    }
+    return out;
+  }
+  // Итог арены: верные ответы и время (не больше лимита + 5 секунд на связь)
+  function arenaScore(lessons, day, answers, ms) {
+    const qs = arenaQuestions(lessons, day);
+    const correct = qs.filter((x, k) => answers && answers[k] !== null && answers[k] !== undefined && Number(answers[k]) === 0).length;
+    return { correct, ms: Math.max(0, Math.min(Math.round(ms), ARENA_MS + 5000)), xp: correct * 2 };
+  }
+  function finishArena(p, day, score, now) {
+    p.arena = { day, done: true, correct: score.correct, ms: score.ms };
+    p.arenaPlayed = (p.arenaPlayed || 0) + 1;
+    p.arenaBest = Math.max(p.arenaBest || 0, score.correct);
+    p.xp += score.xp;
+    return checkAchievements(p, now);
   }
 
   // ---------- Профиль: аватарка и имя для рейтинга ----------
@@ -137,6 +282,11 @@
     MAX_HEARTS, HEART_MIN, XP_PER_LEVEL, mskDay, prevDay, newPlayer, hasPlus,
     refreshHearts, loseHeart, nextHeartMs, currentStreak, bumpStreak, level, levelProgress, lessonXp,
     isUnlocked, norm, checkAnswer, rightAnswer, finishLesson, AVATARS, cleanName, cleanAvatar, isPhoto, PHOTO_MAX,
+    recordAnswer, doneCount, ACHIEVEMENTS, checkAchievements,
+    DAILY_XP, dailyAvailable, dailyNextDay, claimDaily,
+    SHOP, PROMO_LIMIT, applyItem, plusDaysLeft,
+    PLACEMENT_UNITS, placementQuestions, applyPlacement,
+    ARENA_SIZE, ARENA_MS, arenaQuestions, arenaScore, finishArena,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.CORE = api;
 })(typeof self !== 'undefined' ? self : this);

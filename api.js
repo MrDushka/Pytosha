@@ -1,7 +1,7 @@
 // Связь приложения с сервером. Если сервер не указан (API_URL пустой) — демо-режим:
 // те же правила (core.js), но прогресс хранится только в этом браузере.
 (function (root) {
-  const { LESSONS, lessonById, lessonIndex } = root.COURSE;
+  const { LESSONS, lessonById, lessonIndex } = root.COURSE; // UNITS берём из root.COURSE там, где нужен
   const C = root.CORE;
   const cfg = root.PITOSHA_CONFIG || {};
   const tg = root.Telegram && root.Telegram.WebApp;
@@ -21,11 +21,16 @@
     return {
       demo: false,
       state: () => post('/state'),
-      start: lessonId => post('/start', { lessonId }),
+      start: (lessonId, restart) => post('/start', { lessonId, restart: !!restart }),
       answer: (lessonId, qi, answer) => post('/answer', { lessonId, qi, answer }),
       top: () => post('/top'),
       buy: item => post('/buy', { item }),
       profile: (name, avatar) => post('/profile', { name, avatar }),
+      daily: () => post('/daily'),
+      placement: answers => post('/placement', { answers }),
+      arenaStart: () => post('/arena_start'),
+      arenaFinish: answers => post('/arena_finish', { answers }),
+      arenaTop: () => post('/arena_top'),
     };
   }
 
@@ -40,21 +45,61 @@
     const view = () => {
       const now = new Date();
       C.refreshHearts(data.player, now);
-      return { ...data.player, name: (data.player.profile && data.player.profile.name) || user.first_name, streakNow: C.currentStreak(data.player, now), nextHeartMs: C.nextHeartMs(data.player, now), plus: C.hasPlus(data.player, now) };
+      return {
+        ...data.player, name: (data.player.profile && data.player.profile.name) || user.first_name, streakNow: C.currentStreak(data.player, now), nextHeartMs: C.nextHeartMs(data.player, now),
+        plus: C.hasPlus(data.player, now), plusDays: C.plusDaysLeft(data.player, now),
+        daily: C.dailyAvailable(data.player, now) ? { day: C.dailyNextDay(data.player, now) } : null,
+        session: data.session ? { lesson: data.session.lesson, i: data.session.i } : null,
+        today: C.mskDay(now),
+      };
     };
     const ok = x => Promise.resolve(x);
     return {
       demo: true,
-      state: () => ok({ player: view() }),
-      start(lessonId) {
+      state: () => ok({ player: view(), promo: { left: data.player.promoUsed ? 0 : 73, available: !data.player.promoUsed } }),
+      start(lessonId, restart) {
         const i = lessonIndex(lessonId);
         if (i < 0) return ok({ error: 'no_lesson' });
         if (!C.isUnlocked(data.player, LESSONS, i)) return ok({ error: 'locked' });
         C.refreshHearts(data.player, new Date());
         if (data.player.hearts <= 0) return ok({ error: 'no_hearts', player: view() });
+        const s = data.session;
+        if (s && s.lesson === lessonId && s.i > 0 && s.i < LESSONS[i].questions.length && !restart) return ok({ player: view(), resume: { i: s.i, correct: s.correct } });
         data.session = { lesson: lessonId, i: 0, correct: 0, mistakes: 0 };
         save();
         return ok({ player: view() });
+      },
+      daily() {
+        const got = C.claimDaily(data.player, new Date());
+        if (!got) return ok({ error: 'already', player: view() });
+        save();
+        return ok({ daily: got, player: view() });
+      },
+      placement(answers) {
+        const res = C.applyPlacement(data.player, root.COURSE.UNITS, answers);
+        save();
+        return ok({ ...res, player: view() });
+      },
+      arenaStart() {
+        const now = new Date(), day = C.mskDay(now), a = data.player.arena;
+        if (a && a.day === day && a.done) return ok({ error: 'played', result: a, player: view() });
+        if (!a || a.day !== day || !a.startedAt) { data.player.arena = { day, startedAt: now.toISOString() }; save(); }
+        return ok({ day, startedAt: data.player.arena.startedAt, now: now.toISOString(), player: view() });
+      },
+      arenaFinish(answers) {
+        const now = new Date(), a = data.player.arena;
+        if (!a || !a.startedAt || a.done) return ok({ error: 'no_arena' });
+        const score = C.arenaScore(LESSONS, a.day, answers, now - new Date(a.startedAt));
+        const ach = C.finishArena(data.player, a.day, score, now);
+        save();
+        return ok({ score, ach, player: view() });
+      },
+      arenaTop() {
+        const a = data.player.arena;
+        const me = a && a.done && a.day === C.mskDay(new Date()) ? [{ name: view().name, avatar: (data.player.profile || {}).avatar || '🐍', correct: a.correct, ms: a.ms, me: true }] : [];
+        const top = [{ name: 'Алиса', avatar: '🦊', correct: 5, ms: 21400 }, { name: 'Тимур', avatar: '🐯', correct: 4, ms: 30100 }, { name: 'Соня', avatar: '🦄', correct: 3, ms: 41000 }]
+          .concat(me).sort((x, y) => y.correct - x.correct || x.ms - y.ms);
+        return ok({ day: C.mskDay(new Date()), top });
       },
       answer(lessonId, qi, answer) {
         const s = data.session;
@@ -63,6 +108,7 @@
         const q = lesson.questions[qi];
         const now = new Date();
         const correct = answer !== null && C.checkAnswer(q, answer);
+        C.recordAnswer(data.player, q, correct);
         if (correct) s.correct++; else { s.mistakes++; C.loseHeart(data.player, now); }
         s.i++;
         let finished = null, failed = false;
