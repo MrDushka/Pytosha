@@ -28,11 +28,9 @@
       profile: (name, avatar) => post('/profile', { name, avatar }),
       daily: () => post('/daily'),
       placement: answers => post('/placement', { answers }),
-      arenaStart: () => post('/arena_start'),
-      arenaFinish: answers => post('/arena_finish', { answers }),
-      arenaTop: () => post('/arena_top'),
       gemBuy: item => post('/gem_buy', { item }),
       questClaim: id => post('/quest_claim', { id }),
+      streakChest: () => post('/streak_chest'),
       friends: () => post('/friends'),
       friendAdd: code => post('/friend_add', { code }),
       friendRemove: id => post('/friend_remove', { id }),
@@ -65,6 +63,7 @@
         today: C.mskDay(now),
         gems: data.player.gems || 0, newbieDays: C.newbieDaysLeft(data.player, now),
         quests: C.questStatus(data.player, now), refLink: 'https://t.me/pythonshkabot?start=ref_demo',
+        streakChest: C.streakChest(data.player, now),
       };
     };
     // Демо-друзья и забеги — чтобы посмотреть экран без сервера
@@ -98,27 +97,6 @@
         save();
         return ok({ ...res, player: view() });
       },
-      arenaStart() {
-        const now = new Date(), day = C.mskDay(now), a = data.player.arena;
-        if (a && a.day === day && a.done) return ok({ error: 'played', result: a, player: view() });
-        if (!a || a.day !== day || !a.startedAt) { data.player.arena = { day, startedAt: now.toISOString() }; save(); }
-        return ok({ day, startedAt: data.player.arena.startedAt, now: now.toISOString(), player: view() });
-      },
-      arenaFinish(answers) {
-        const now = new Date(), a = data.player.arena;
-        if (!a || !a.startedAt || a.done) return ok({ error: 'no_arena' });
-        const score = C.arenaScore(LESSONS, a.day, answers, now - new Date(a.startedAt));
-        const ach = C.finishArena(data.player, a.day, score, now);
-        save();
-        return ok({ score, ach, player: view() });
-      },
-      arenaTop() {
-        const a = data.player.arena;
-        const me = a && a.done && a.day === C.mskDay(new Date()) ? [{ name: view().name, avatar: (data.player.profile || {}).avatar || '🐍', correct: a.correct, ms: a.ms, me: true }] : [];
-        const top = [{ name: 'Алиса', avatar: '🦊', correct: 5, ms: 21400 }, { name: 'Тимур', avatar: '🐯', correct: 4, ms: 30100 }, { name: 'Соня', avatar: '🦄', correct: 3, ms: 41000 }]
-          .concat(me).sort((x, y) => y.correct - x.correct || x.ms - y.ms);
-        return ok({ day: C.mskDay(new Date()), top });
-      },
       answer(lessonId, qi, answer) {
         const s = data.session;
         if (!s || s.lesson !== lessonId || s.i !== qi) return ok({ error: 'stale' });
@@ -144,6 +122,12 @@
         const res = C.buyWithGems(data.player, item, new Date());
         if (!res.error) save();
         return ok({ ...res, player: view() });
+      },
+      streakChest() {
+        const got = C.claimStreakChest(data.player, new Date());
+        if (!got) return ok({ error: 'not_ready', player: view() });
+        save();
+        return ok({ chest: got, player: view() });
       },
       questClaim(id) {
         const got = C.claimQuest(data.player, new Date(), id);

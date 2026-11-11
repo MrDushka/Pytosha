@@ -145,7 +145,6 @@
     { id: 'code2', type: 'code', target: 2, ico: '⌨️', title: 'Реши 2 задачи с кодом', chest: 'silver' },
     { id: 'xp30', type: 'xp', target: 30, ico: '⭐', title: 'Заработай 30 XP', chest: 'bronze' },
     { id: 'xp60', type: 'xp', target: 60, ico: '🌟', title: 'Заработай 60 XP', chest: 'silver' },
-    { id: 'arena1', type: 'arena', target: 1, ico: '⚔️', title: 'Сыграй на арене', chest: 'bronze' },
   ];
   const CHESTS = { bronze: [10, 25], silver: [20, 40], gold: [40, 80] }; // алмазы: от и до
   function seeded(text) {
@@ -196,6 +195,27 @@
     return { chest, gems };
   }
 
+  // ---------- Сундуки за серию (как в Duolingo): каждые 10 дней огонька — сундук с алмазами ----------
+  // 10 дней → 50 💎, 20 → 100, 30 → 150 … (до 500). Каждый рубеж — один раз за всё время.
+  const STREAK_STEP = 10;
+  const streakChestGems = n => Math.min(500, n * 5);
+  const streakChestKind = n => (n >= 100 ? 'gold' : n >= 50 ? 'silver' : 'bronze');
+  function streakChest(p, now) {
+    const s = currentStreak(p, now);
+    const n = Math.floor(s / STREAK_STEP) * STREAK_STEP;
+    const next = (Math.max(Math.floor(s / STREAK_STEP), Math.floor((p.streakChestMax || 0) / STREAK_STEP)) + 1) * STREAK_STEP;
+    const ready = n >= STREAK_STEP && n > (p.streakChestMax || 0)
+      ? { n, gems: streakChestGems(n), chest: streakChestKind(n) } : null;
+    return { streak: s, ready, next, nextGems: streakChestGems(next), nextChest: streakChestKind(next) };
+  }
+  function claimStreakChest(p, now) {
+    const { ready } = streakChest(p, now);
+    if (!ready) return null;
+    p.streakChestMax = ready.n;
+    p.gems = (p.gems || 0) + ready.gems;
+    return ready;
+  }
+
   // ---------- Алмазы: бесплатная сторона магазина ----------
   const GEM_SHOP = {
     heart: { title: '❤️ Одно сердце', description: 'Восстановить одну жизнь', gems: 100 },
@@ -244,8 +264,6 @@
     { id: 'code25', ico: '⌨️', title: 'Кодер', desc: 'Реши 25 задач с кодом', test: p => (p.codeSolved || 0) >= 25 },
     { id: 'level10', ico: '⭐', title: 'Уровень 10', desc: 'Набери 10-й уровень', test: p => level(p.xp) >= 10 },
     { id: 'lessons50', ico: '🎓', title: 'Полсотни', desc: 'Пройди 50 уроков', test: p => doneCount(p) >= 50 },
-    { id: 'arena', ico: '⚔️', title: 'Гладиатор', desc: 'Сыграй на арене', test: p => (p.arenaPlayed || 0) >= 1 },
-    { id: 'arena_perfect', ico: '⚡', title: 'Молния', desc: 'Ответь на арене на все вопросы верно', test: p => (p.arenaBest || 0) >= ARENA_SIZE },
     { id: 'streak30', ico: '🏆', title: 'Месяц подряд', desc: 'Учись 30 дней подряд', test: p => (p.bestStreak || 0) >= 30 },
     { id: 'lessons100', ico: '🏛️', title: 'Сотня', desc: 'Пройди 100 уроков', test: p => doneCount(p) >= 100 },
     { id: 'code100', ico: '🤖', title: 'Машина кода', desc: 'Реши 100 задач с кодом', test: p => (p.codeSolved || 0) >= 100 },
@@ -331,42 +349,6 @@
     return { skipped: k };
   }
 
-  // ---------- Арена: 5 вопросов за 60 секунд, у всех в этот день одни и те же ----------
-  const ARENA_SIZE = 5;
-  const ARENA_MS = 60000;
-  function arenaQuestions(lessons, day) {
-    const basics = new Set(['u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8', 'u9', 'u10', 'u11']);
-    const pool = [];
-    for (const l of lessons) {
-      if (!basics.has(l.unit)) continue;
-      l.questions.forEach((q, qi) => { if (q.type === 'output' && q.options && q.code) pool.push({ lesson: l.id, qi, q }); });
-    }
-    let seed = 0;
-    for (const ch of 'arena:' + day) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
-    const rnd = () => { seed = (seed * 1103515245 + 12345) >>> 0; return seed / 4294967296; };
-    const out = [], used = new Set();
-    while (out.length < Math.min(ARENA_SIZE, pool.length)) {
-      const k = Math.floor(rnd() * pool.length);
-      if (!used.has(k)) { used.add(k); out.push(pool[k]); }
-    }
-    return out;
-  }
-  // Итог арены: верные ответы и время (не больше лимита + 5 секунд на связь)
-  function arenaScore(lessons, day, answers, ms) {
-    const qs = arenaQuestions(lessons, day);
-    const correct = qs.filter((x, k) => answers && answers[k] !== null && answers[k] !== undefined && Number(answers[k]) === 0).length;
-    return { correct, ms: Math.max(0, Math.min(Math.round(ms), ARENA_MS + 5000)), xp: correct * 2 };
-  }
-  function finishArena(p, day, score, now) {
-    p.arena = { day, done: true, correct: score.correct, ms: score.ms };
-    p.arenaPlayed = (p.arenaPlayed || 0) + 1;
-    p.arenaBest = Math.max(p.arenaBest || 0, score.correct);
-    p.xp += score.xp;
-    questEvent(p, now, 'arena', 1);
-    questEvent(p, now, 'xp', score.xp);
-    return checkAchievements(p, now);
-  }
-
   // ---------- Профиль: аватарка и имя для рейтинга ----------
   const AVATARS = ['🐍', '🦊', '🐼', '🐯', '🐸', '🐵', '🦁', '🐨', '🐙', '🦄', '🐲', '🤖', '👾', '🦖', '🐧', '🐺', '😎', '🥷', '🧙', '👽', '🐱', '🐶', '🦉', '🚀'];
   // Корни грубых слов — такие имена в рейтинге не пропускаем
@@ -404,10 +386,9 @@
     DAILY_XP, dailyAvailable, dailyNextDay, claimDaily,
     SHOP, PROMO_LIMIT, applyItem, plusDaysLeft,
     PLACEMENT_UNITS, placementQuestions, applyPlacement,
-    ARENA_SIZE, ARENA_MS, arenaQuestions, arenaScore, finishArena,
     NEWBIE_DAYS, ensureStart, newbieDaysLeft, isNewbie, unlimitedHearts,
     QUESTS, CHESTS, questsFor, questEvent, questStatus, claimQuest,
-    GEM_SHOP, buyWithGems,
+    GEM_SHOP, buyWithGems, STREAK_STEP, streakChest, claimStreakChest,
     REF_DAYS, REF_PLUS_DAYS, referralReady, grantPlusDays, makeCode, cleanCode, RACE_DAYS, RACE_PRIZE, RACE_PRIZE_DRAW,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.CORE = api;

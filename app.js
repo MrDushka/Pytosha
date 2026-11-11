@@ -3,10 +3,11 @@
   const { UNITS, LESSONS, lessonById, lessonIndex } = window.COURSE;
   const C = window.CORE;
   const api = window.API;
+  const { I, svgify, ent } = window.ICONS; // SVG-иконки вместо эмодзи
   const tg = window.Telegram && window.Telegram.WebApp;
   const $app = document.getElementById('app');
 
-  const S = { tab: 'learn', view: 'tabs', player: null, L: null, finish: null, top: null, promo: null, arena: null, arenaTop: null, P: null, sandbox: null,
+  const S = { tab: 'learn', view: 'tabs', player: null, L: null, finish: null, top: null, promo: null, P: null, sandbox: null,
     topMode: 'xp', shopSide: 'stars', fr: null, snip: null, snips: null };
 
   // Хранилище браузера: черновики кода, тема, вибрация. Может быть недоступно — тогда просто не запоминаем.
@@ -31,7 +32,6 @@
     if (tg.BackButton) tg.BackButton.onClick(() => {
       if (S.view === 'lesson') askQuit();
       else if (S.view === 'register' && S.reg && S.reg.first) return; // без имени дальше нельзя
-      else if (S.view === 'arena-play') return; // идёт время — выходить нельзя
       else { S.view = 'tabs'; render(); }
     });
   }
@@ -41,7 +41,7 @@
   const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   function toast(text) {
     const t = document.getElementById('toast');
-    t.textContent = text; t.hidden = false;
+    t.innerHTML = svgify(esc(text)); t.hidden = false;
     clearTimeout(toast.timer); toast.timer = setTimeout(() => { t.hidden = true; }, 2600);
   }
   const mins = ms => { const m = Math.ceil(ms / 60000); return m >= 60 ? `${Math.floor(m / 60)} ч ${m % 60} мин` : `${m} мин`; };
@@ -151,10 +151,10 @@
     if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const box = document.createElement('div');
     box.className = 'confetti';
-    const items = ['🎉', '⭐', '✨', '🐍', '💛', '🔥'];
+    const items = ['party', 'star', 'sparkle', 'gem', 'heart', 'fire'];
     for (let k = 0; k < 26; k++) {
       const s = document.createElement('span');
-      s.textContent = items[k % items.length];
+      s.innerHTML = I(items[k % items.length]);
       s.style.left = Math.random() * 100 + '%';
       s.style.animationDelay = Math.random() * 0.5 + 's';
       s.style.fontSize = 16 + Math.random() * 18 + 'px';
@@ -199,7 +199,7 @@
   // Аватарка: эмодзи или своё фото (data:image/… — проверено C.isPhoto, поэтому безопасно для src)
   function avatarHtml(a) {
     if (C.isPhoto(a)) return `<img class="av-img" src="${a}" alt="">`;
-    return esc(C.AVATARS.includes(a) ? a : '🐍');
+    return `<span class="emo">${ent(C.AVATARS.includes(a) ? a : C.AVATARS[0])}</span>`; // эмодзи-аватарка остаётся эмодзи
   }
   // Фото с телефона/компьютера → квадрат 128×128 по центру → JPEG поменьше
   async function photoToAvatar(file) {
@@ -241,7 +241,7 @@
       <p>${R.first ? 'Выбери аватарку и имя — их увидят все в таблице лидеров 🏆' : 'Аватарка и имя видны в таблице лидеров'}</p>
       <label class="photo-btn ${own ? 'sel' : ''}">📷 ${own ? 'Выбрать другое фото' : 'Своё фото с телефона или компьютера'}
         <input type="file" id="photo-input" accept="image/*" hidden></label>
-      <div class="avatar-grid">${C.AVATARS.map(a => `<button class="av ${a === R.avatar ? 'sel' : ''}" data-avatar="${a}">${a}</button>`).join('')}</div>
+      <div class="avatar-grid">${C.AVATARS.map(a => `<button class="av ${a === R.avatar ? 'sel' : ''}" data-avatar="${a}">${ent(a)}</button>`).join('')}</div>
       <input class="answer-input name-input" id="reg-name" maxlength="16" autocomplete="off" placeholder="Твоё имя или ник" value="${esc(R.name)}">
       <div class="reg-error">${esc(R.error || '')}</div>
       <p class="note">Не пиши фамилию, школу и адрес — это видят все. Фото тоже видно всем: лучше не ставь своё лицо, выбери картинку или рисунок.</p>
@@ -295,7 +295,7 @@
     // Недоконченный урок — продолжить с того же вопроса
     const s = p.session && lessonById(p.session.lesson);
     if (s && p.session.i > 0 && p.session.i < s.questions.length) {
-      html += `<button class="card banner resume" data-lesson="${s.id}"><span class="b-ico">${s.emoji}</span>
+      html += `<button class="card banner resume" data-lesson="${s.id}"><span class="b-ico">${I('play')}</span>
         <span class="b-text"><b>Продолжить урок</b><small>«${esc(s.title)}» — вопрос ${p.session.i + 1} из ${s.questions.length}</small></span><span class="b-go">▶</span></button>`;
     }
     // Режим новичка: первые 14 дней жизни не тратятся
@@ -303,6 +303,7 @@
       html += `<div class="card banner newbie"><span class="b-ico">🐣</span><span class="b-text"><b>Режим новичка</b>
         <small>Ещё ${p.newbieDays} ${days(p.newbieDays)} жизни не тратятся — ошибайся смело!</small></span></div>`;
     }
+    html += streakChestCard(true); // сундук за серию готов — показываем сразу
     // Ежедневный бонус: 7 дней по кругу
     if (p.daily) {
       const d = p.daily.day;
@@ -323,7 +324,7 @@
         const off = OFFSETS[i % OFFSETS.length];
         html += `<div class="node-wrap ${isCur ? 'current' : ''}" style="transform:translateX(${off}px)">
           ${isCur ? '<div class="start-bubble">СТАРТ</div>' : ''}
-          <button class="node ${cls} ${isCur ? 'current' : ''}" data-lesson="${l.id}" ${open ? '' : 'aria-disabled="true"'}>${skipped ? '⏭' : done ? '✓' : open ? l.emoji : '🔒'}</button>
+          <button class="node ${cls} ${isCur ? 'current' : ''}" data-lesson="${l.id}" ${open ? '' : 'aria-disabled="true"'}>${skipped ? I('skip') : done ? I('tick') : open ? I(l.questions.every(q => q.type === 'code') ? 'code' : 'star') : I('lock')}</button>
           <div class="node-title">${i + 1}. ${esc(l.title)}</div>
           ${isCur ? `<div class="path-mascot" style="${off >= 0 ? 'right' : 'left'}:${off >= 0 ? 120 : 120}px;top:-6px">${window.pitosha({ size: 96 })}</div>` : ''}
         </div>`;
@@ -358,6 +359,7 @@
         : `<div class="card" style="margin-top:12px">❤️ ${p.hearts < C.MAX_HEARTS ? `Жизней: ${p.hearts}/${C.MAX_HEARTS}, новая через ${mins(p.nextHeartMs)}` : 'Все жизни на месте'}
           <button class="link-btn" data-act="renew">👑 Безлимит жизней с Плюсом</button></div>`}
       ${p.freezes ? `<div class="card">🧊 Заморозок серии: ${p.freezes}</div>` : ''}
+      <h3 class="sub">🎁 Сундуки за серию</h3>${streakChestCard()}
       <h3 class="sub">🏅 Ачивки · ${Object.keys(p.ach || {}).length}/${C.ACHIEVEMENTS.length}</h3>
       <div class="ach-grid">${C.ACHIEVEMENTS.map(a => { const got = p.ach && p.ach[a.id];
         return `<div class="ach ${got ? 'got' : ''}" title="${esc(a.desc)}"><span>${got ? a.ico : '🔒'}</span><b>${esc(a.title)}</b><small>${esc(a.desc)}</small></div>`; }).join('')}</div>
@@ -370,11 +372,10 @@
 
   // ---------- Рейтинг ----------
   function topScreen() {
-    const seg = `<div class="seg"><button class="${S.topMode === 'xp' ? 'on' : ''}" data-top-mode="xp">🏆 Общий</button><button class="${S.topMode === 'arena' ? 'on' : ''}" data-top-mode="arena">⚔️ Арена</button></div>`;
-    if (S.topMode === 'arena') return `<div class="screen"><h2 class="title">Рейтинги</h2>${seg}${arenaScreen()}</div>`;
-    if (!S.top) { api.top().then(r => { S.top = r.top || []; if (S.tab === 'top') render(); }); return `<div class="screen"><h2 class="title">Рейтинги</h2>${seg}<p class="note">Загружаю…</p></div>`; }
+    const seg = '';
+    if (!S.top) { api.top().then(r => { S.top = r.top || []; if (S.tab === 'top') render(); }); return `<div class="screen"><h2 class="title">Рейтинг</h2>${seg}<p class="note">Загружаю…</p></div>`; }
     const medals = ['🥇', '🥈', '🥉'];
-    return `<div class="screen"><h2 class="title">Рейтинги</h2>${seg}<div class="card">${S.top.length ? S.top.map((u, i) =>
+    return `<div class="screen"><h2 class="title">Рейтинг</h2>${seg}<div class="card">${S.top.length ? S.top.map((u, i) =>
       `<div class="row ${u.me ? 'me' : ''}"><div class="place">${medals[i] || u.place || i + 1}</div><div class="row-av">${avatarHtml(u.avatar || '🐍')}</div><div class="who">${esc(u.name)}${u.me ? ' (ты)' : ''}</div><div class="pts">${u.xp} XP</div></div>`).join('')
       : '<p class="note">Пока пусто — пройди урок и стань первым!</p>'}</div>
       <p class="note">Опыт дают за уроки. Без ошибок — бонус!</p></div>`;
@@ -395,7 +396,7 @@
     const seg = `<div class="seg"><button class="${S.shopSide !== 'gems' ? 'on' : ''}" data-shop-side="stars">⭐ За звёзды</button><button class="${S.shopSide === 'gems' ? 'on' : ''}" data-shop-side="gems">💎 Бесплатно</button></div>`;
     if (S.shopSide === 'gems') {
       return `<div class="screen"><h2 class="title">Магазин</h2>${seg}
-        <div class="card gem-balance"><span>💎</span><div><b>${p.gems || 0} алмазов</b><small>1–10 за каждый урок, сундуки за задания и забеги</small></div></div>
+        <div class="card gem-balance"><span>💎</span><div><b>${p.gems || 0} алмазов</b><small>1–10 за каждый урок, сундуки за задания, забеги и каждые 10 дней серии</small></div></div>
         ${Object.entries(C.GEM_SHOP).map(([id, it]) => `<div class="card shop-item"><div class="ico">${it.title.split(' ')[0]}</div>
           <div class="info"><b>${esc(it.title.slice(it.title.indexOf(' ') + 1))}</b><small>${esc(it.description)}</small></div>
           <button class="price gem-price" data-gem-buy="${id}" ${(p.gems || 0) < it.gems ? 'disabled' : ''}>${it.gems} 💎</button></div>`).join('')}
@@ -435,13 +436,38 @@
 
   // ---------- Задания на день → сундуки ----------
   const CHEST_ICO = { bronze: '🟫', silver: '⬜', gold: '🟨' };
+  const chestIco = kind => I({ bronze: 'chest_b', silver: 'chest_s', gold: 'chest_g' }[kind] || 'chest_b');
+  // ---------- Сундуки за серию: каждые 10 дней огонька ----------
+  function streakChestCard(compact) {
+    const sc = S.player.streakChest;
+    if (!sc) return '';
+    if (sc.ready) return `<div class="card streak-chest ready"><div class="sc-ico shake">${chestIco(sc.ready.chest)}</div>
+      <div class="sc-body"><b>Сундук за серию ${sc.ready.n} ${days(sc.ready.n)}!</b><small>Внутри ${sc.ready.gems} 💎 — забирай</small></div>
+      <button class="price" data-act="streak-chest">Открыть</button></div>`;
+    if (compact) return '';
+    const from = sc.next - C.STREAK_STEP, have = Math.max(0, sc.streak - from);
+    const marks = [0, 1, 2, 3].map(k => sc.next + k * C.STREAK_STEP);
+    return `<div class="card streak-chest"><div class="sc-ico">${chestIco(sc.nextChest)}</div>
+      <div class="sc-body"><b>🔥 ${sc.streak} → ${sc.next} ${days(sc.next)}</b><small>Сундук: ${sc.nextGems} 💎 · каждые ${C.STREAK_STEP} дней огонька</small>
+        <div class="q-bar"><i style="width:${(have / C.STREAK_STEP) * 100}%"></i><span>${have} / ${C.STREAK_STEP}</span></div>
+        <div class="sc-marks">${marks.map(m => `<span>${chestIco(m >= 100 ? 'gold' : m >= 50 ? 'silver' : 'bronze')}<em>${m}</em></span>`).join('')}</div></div></div>`;
+  }
+  async function openStreakChest() {
+    haptic();
+    const r = await api.streakChest();
+    if (r.player) S.player = r.player;
+    if (r.chest) { haptic('ok'); celebrate(); toast(`Сундук за ${r.chest.n} ${days(r.chest.n)} серии: +${r.chest.gems} 💎`); }
+    else toast('Этот сундук уже открыт');
+    render();
+  }
   function questsScreen() {
     const st = S.player.quests;
     if (!st) return '<div class="screen"><h2 class="title">Задания</h2><p class="note">Загружаю…</p></div>';
-    const chestBtn = (id, done, claimed, kind) => claimed ? '<span class="chest open">✅</span>'
-      : done ? `<button class="chest ready" data-quest="${id}">🎁<small>Открыть</small></button>` : `<span class="chest">${CHEST_ICO[kind]}🔒</span>`;
+    const chestBtn = (id, done, claimed, kind) => claimed ? `<span class="chest open">${I('chest_open')}</span>`
+      : done ? `<button class="chest ready" data-quest="${id}"><span class="shake">${chestIco(kind)}</span><small>Открыть</small></button>` : `<span class="chest locked">${chestIco(kind)}</span>`;
     return `<div class="screen"><h2 class="title">Задания на сегодня</h2>
       <p class="note" style="text-align:left;margin:-8px 0 12px">Новые задания — каждый день в полночь. За каждое — сундук с алмазами 💎</p>
+      ${streakChestCard()}
       ${st.list.map(q => `<div class="card quest ${q.done ? 'done' : ''}"><span class="q-ico">${q.ico}</span>
         <div class="q-body"><b>${esc(q.title)}</b><div class="q-bar"><i style="width:${(q.have / q.target) * 100}%"></i><span>${q.have} / ${q.target}</span></div></div>
         ${chestBtn(q.id, q.done, q.claimed, q.chest)}</div>`).join('')}
@@ -452,7 +478,7 @@
     haptic();
     const r = await api.questClaim(id);
     if (r.player) S.player = r.player;
-    if (r.chest) { haptic('ok'); celebrate(); toast(`${CHEST_ICO[r.chest.chest]} Сундук открыт: +${r.chest.gems} 💎`); }
+    if (r.chest) { haptic('ok'); celebrate(); toast(`Сундук открыт: +${r.chest.gems} 💎`); }
     render();
   }
 
@@ -520,90 +546,12 @@
       <div class="card menu">
         <button class="menu-row" data-act="vibro"><span>📳 Вибрация</span><i class="switch ${vibro ? 'on' : ''}"></i></button>
         <button class="menu-row" data-act="sandbox"><span>🧪 Песочница${canPlus() ? '' : ' 👑'}</span><i>›</i></button>
-        <button class="menu-row" data-tab="top" data-top-mode="arena"><span>⚔️ Арена</span><i>›</i></button>
         <button class="menu-row" data-act="invite"><span>📨 Пригласить друга</span><i>›</i></button>
         <button class="menu-row" data-act="share"><span>📤 Поделиться успехами</span><i>›</i></button>
         <button class="menu-row" data-act="edit-profile"><span>✏️ Имя и аватарка</span><i>›</i></button>
       </div>
       <p class="note">Проблема с покупкой? Напиши боту /paysupport</p>
       ${api.demo ? '<p class="note">Демо-режим: прогресс хранится в этом браузере.</p><button class="big ghost" data-act="reset">Сбросить прогресс</button>' : ''}</div>`;
-  }
-
-  // ---------- Арена: 5 вопросов за 60 секунд, раз в день ----------
-  const secs = ms => (ms / 1000).toFixed(1).replace('.', ',');
-  function arenaList() {
-    if (!S.arenaTop) { api.arenaTop().then(r => { S.arenaTop = r.top || []; if (S.tab === 'top' && S.view === 'tabs') render(); }); return '<p class="note">Загружаю…</p>'; }
-    if (!S.arenaTop.length) return '<p class="note">Сегодня ещё никто не играл — будь первым!</p>';
-    const medals = ['🥇', '🥈', '🥉'];
-    return S.arenaTop.map((u, i) => `<div class="row ${u.me ? 'me' : ''}"><div class="place">${medals[i] || i + 1}</div><div class="row-av">${avatarHtml(u.avatar || '🐍')}</div>
-      <div class="who">${esc(u.name)}${u.me ? ' (ты)' : ''}</div><div class="pts">${u.correct}/${C.ARENA_SIZE} · ${secs(u.ms)} с</div></div>`).join('');
-  }
-  function arenaScreen() {
-    const p = S.player, a = p.arena;
-    const played = a && a.done && a.day === p.today;
-    return `${played ? `<div class="card arena-card"><b>Твой результат сегодня</b><div class="arena-score">${a.correct}/${C.ARENA_SIZE}<small>за ${secs(a.ms)} с</small></div>
-          <p class="note">Новая арена — завтра. Те же вопросы сегодня у всех!</p></div>`
-        : `<div class="card arena-card"><b>${C.ARENA_SIZE} вопросов «что выведет код?» за 60 секунд</b>
-          <p class="note">Одна попытка в день, вопросы у всех одинаковые. Побеждает тот, кто ответит верно на больше вопросов, а при равенстве — быстрее. За каждый верный ответ +2 XP.</p>
-          <button class="big" data-act="arena-go">⚔️ Начать</button></div>`}
-      <h3 class="sub">🏆 Топ-10 сегодня</h3><div class="card">${arenaList()}</div>`;
-  }
-  async function startArena() {
-    haptic();
-    const r = await api.arenaStart();
-    if (r.player) S.player = r.player;
-    if (r.error === 'played') { S.arenaTop = null; return render(); }
-    if (r.error) return toast('Не получилось начать арену, попробуй позже');
-    const passed = new Date(r.now) - new Date(r.startedAt); // если уже начинал и вышел — время идёт дальше
-    const qs = C.arenaQuestions(LESSONS, r.day);
-    S.arena = { day: r.day, qs, i: 0, answers: [], deadline: Date.now() + C.ARENA_MS - Math.max(0, passed), order: shuffle(qs[0].q.options.map((_, k) => k)), sending: false };
-    S.view = 'arena-play';
-    render();
-  }
-  function arenaPlayScreen() {
-    const A = S.arena, cur = A.qs[A.i], q = cur.q;
-    const left = Math.max(0, A.deadline - Date.now());
-    return `<div class="lesson"><div class="lesson-top"><div class="stat">⚔️ ${A.i + 1}/${A.qs.length}</div>
-      <div class="progress arena-time"><i id="arena-bar" style="width:${(left / C.ARENA_MS) * 100}%"></i></div><div class="stat" id="arena-sec">${Math.ceil(left / 1000)}</div></div>
-      <div class="q-area"><div class="q-kind">🖥 Что выведет код?</div>${q.code ? `<pre class="code">${highlight(q.code)}</pre>` : ''}
-      <div class="options">${A.order.map(orig => `<button class="opt" data-arena-opt="${orig}">${esc(q.options[orig])}</button>`).join('')}</div></div></div>`;
-  }
-  function tickArena() {
-    const A = S.arena;
-    if (!A || A.timer) return;
-    A.timer = setInterval(() => {
-      const left = Math.max(0, A.deadline - Date.now());
-      const bar = document.getElementById('arena-bar'), sec = document.getElementById('arena-sec');
-      if (bar) bar.style.width = (left / C.ARENA_MS) * 100 + '%';
-      if (sec) sec.textContent = Math.ceil(left / 1000);
-      if (left <= 0) finishArenaRun();
-    }, 200);
-  }
-  function arenaAnswer(orig) {
-    const A = S.arena;
-    if (!A || A.sending) return;
-    A.answers.push(orig);
-    haptic(orig === 0 ? 'ok' : 'bad');
-    if (A.answers.length >= A.qs.length) return finishArenaRun();
-    A.i++;
-    A.order = shuffle(A.qs[A.i].q.options.map((_, k) => k));
-    render();
-  }
-  async function finishArenaRun() {
-    const A = S.arena;
-    if (!A || A.sending) return;
-    A.sending = true;
-    clearInterval(A.timer);
-    while (A.answers.length < A.qs.length) A.answers.push(null); // не успел — ответ не засчитан
-    const r = await api.arenaFinish(A.answers);
-    if (r.player) S.player = r.player;
-    S.arena = null; S.arenaTop = null; S.view = 'tabs'; S.tab = 'top'; S.topMode = 'arena';
-    render();
-    if (r.score) {
-      toast(`⚔️ ${r.score.correct}/${C.ARENA_SIZE} за ${secs(r.score.ms)} с · +${r.score.xp} XP`);
-      if (r.score.correct >= 3) celebrate();
-      if (r.ach && r.ach.length) setTimeout(() => showAch(r.ach), 2700);
-    } else toast('Не получилось сохранить результат 😔');
   }
 
   // ---------- Песочница (Плюс): пиши любой код ----------
@@ -1038,19 +986,17 @@
     else if (S.view === 'register') html = registerScreen();
     else if (S.view === 'onboard') html = onboardScreen();
     else if (S.view === 'placement') html = placementScreen();
-    else if (S.view === 'arena-play') html = arenaPlayScreen();
     else if (S.view === 'sandbox') html = sandboxScreen();
     else if (S.view === 'snippet') html = snippetScreen();
     else html = topbar() + ({ learn: learnScreen, quests: questsScreen, top: topScreen, friends: friendsScreen, shop: shopScreen, me: meScreen, more: moreScreen }[S.tab] || learnScreen)() + tabs();
-    $app.innerHTML = html;
+    $app.innerHTML = svgify(html);
     document.body.classList.toggle('with-nav', S.view === 'tabs'); // боковая панель на компьютере — только на вкладках
-    const noBack = S.view === 'tabs' || S.view === 'onboard' || S.view === 'arena-play' || (S.view === 'register' && S.reg.first) || (S.view === 'placement' && S.P && S.P.result);
+    const noBack = S.view === 'tabs' || S.view === 'onboard' || (S.view === 'register' && S.reg.first) || (S.view === 'placement' && S.P && S.P.result);
     if (tg && tg.BackButton) { if (noBack) tg.BackButton.hide(); else tg.BackButton.show(); }
     const editor = document.getElementById('editor');
     if (editor) setupEditor(editor, v => { S.L.code = v; saveDraft(); });
     const sbEditor = document.getElementById('sb-editor');
     if (sbEditor) setupEditor(sbEditor, v => { S.sandbox.code = v; store.set('pitosha-sandbox', v); });
-    if (S.view === 'arena-play') tickArena();
     const regInput = document.getElementById('reg-name');
     if (regInput) regInput.addEventListener('keydown', e => { if (e.key === 'Enter') saveProfile(); });
     const friendForm = document.getElementById('friend-form');
@@ -1090,8 +1036,8 @@
     const t = e.target.closest('button');
     if (!t || t.disabled) return;
     const d = t.dataset;
-    if (d.tab) { S.tab = d.tab; S.view = 'tabs'; haptic(); if (d.shopSide) S.shopSide = d.shopSide; if (d.topMode) S.topMode = d.topMode; if (d.tab === 'top') { S.top = null; S.arenaTop = null; } if (d.tab === 'friends') S.fr = null; render(); window.scrollTo(0, 0); }
-    else if (d.topMode) { S.topMode = d.topMode; S.arenaTop = null; S.top = null; haptic(); render(); }
+    if (d.tab) { S.tab = d.tab; S.view = 'tabs'; haptic(); if (d.shopSide) S.shopSide = d.shopSide; if (d.topMode) S.topMode = d.topMode; if (d.tab === 'top') S.top = null; if (d.tab === 'friends') S.fr = null; render(); window.scrollTo(0, 0); }
+    else if (d.topMode) { S.topMode = d.topMode; S.top = null; haptic(); render(); }
     else if (d.shopSide) { S.shopSide = d.shopSide; haptic(); render(); }
     else if (d.gemBuy) gemBuy(d.gemBuy);
     else if (d.quest) claimQuestChest(d.quest);
@@ -1108,13 +1054,12 @@
     else if (d.act === 'snip-run') runSnippet();
     else if (d.act === 'vibro') { store.set('pitosha-vibro', store.get('pitosha-vibro') === 'off' ? 'on' : 'off'); haptic(); render(); }
     else if (d.place !== undefined) placementAnswer(d.place);
-    else if (d.arenaOpt !== undefined) arenaAnswer(Number(d.arenaOpt));
     else if (d.theme) pickTheme(d.theme);
     else if (d.act === 'daily') claimDaily();
+    else if (d.act === 'streak-chest') openStreakChest();
     else if (d.act === 'onb-new') { S.view = 'tabs'; S.tab = 'learn'; render(); }
     else if (d.act === 'onb-test') startPlacement();
     else if (d.act === 'share') shareResult();
-    else if (d.act === 'arena-go') startArena();
     else if (d.act === 'sandbox') openSandbox();
     else if (d.act === 'sb-run') runSandbox();
     else if (d.act === 'renew') { S.tab = 'shop'; S.view = 'tabs'; render(); window.scrollTo(0, 0); }

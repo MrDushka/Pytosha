@@ -268,10 +268,6 @@ h3.sub { font-size: 18px; font-weight: 900; margin: 18px 0 10px; }
 .plan:active, .promo:active { transform: translateY(3px); }
 
 /* ---------- Арена ---------- */
-.arena-card { text-align: center; display: flex; flex-direction: column; gap: 8px; }
-.arena-score { font-size: 46px; font-weight: 900; color: var(--yellow); }
-.arena-score small { display: block; font-size: 15px; color: var(--muted); }
-.arena-time i { background: #ff9f43; transition: width .2s linear; }
 
 /* ---------- Алмазы, новичок, переключатели ---------- */
 .stat.gem { color: #5fc4ff; font-weight: 900; }
@@ -340,3 +336,32 @@ h3.sub { font-size: 18px; font-weight: 900; margin: 18px 0 10px; }
 .shake { animation: shake .35s; }
 @keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* ---------- SVG-иконки (вместо эмодзи) ---------- */
+.ic { width: 1.15em; height: 1.15em; display: inline-block; vertical-align: -0.2em; flex: none; overflow: visible; }
+.node .ic { width: 0.95em; height: 0.95em; vertical-align: middle; }
+.node.done .ic, .node.done.skipped .ic { color: #fff; }
+.node.done.skipped .ic { color: var(--muted); }
+.node.open .ic, .node.current .ic { filter: drop-shadow(0 2px 0 rgba(0,0,0,.18)); }
+.node .ic { color: #fff; }
+.tab span .ic { width: 1.1em; height: 1.1em; }
+.confetti span .ic { width: 1em; height: 1em; }
+.emo { line-height: 1; }
+
+/* ---------- Сундуки ---------- */
+.chest .ic, .sc-ico .ic { width: 42px; height: 42px; }
+.chest.locked .ic { filter: grayscale(.85) brightness(.85); opacity: .7; }
+.chest.open .ic { opacity: .75; }
+.shake { display: inline-block; animation: chest-shake 1.6s ease-in-out infinite; transform-origin: 50% 90%; }
+@keyframes chest-shake { 0%, 60%, 100% { transform: rotate(0) scale(1); } 66% { transform: rotate(-9deg) scale(1.06); } 74% { transform: rotate(8deg) scale(1.06); } 82% { transform: rotate(-5deg); } 90% { transform: rotate(3deg); } }
+@media (prefers-reduced-motion: reduce) { .shake { animation: none; } }
+.streak-chest { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.streak-chest.ready { border-color: var(--yellow); background: color-mix(in srgb, var(--yellow) 12%, var(--card)); }
+.sc-ico { flex: none; }
+.sc-ico .ic { width: 52px; height: 52px; }
+.sc-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.sc-body small { color: var(--muted); font-weight: 800; }
+.sc-marks { display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap; }
+.sc-marks span { display: flex; align-items: center; gap: 3px; font-weight: 900; font-size: 13px; color: var(--muted); }
+.sc-marks .ic { width: 22px; height: 22px; }
+.sc-marks em { font-style: normal; }
