@@ -328,7 +328,8 @@
         <div class="tile"><b>📚 ${doneCount}/${LESSONS.length}</b><small>уроков пройдено</small></div>
       </div>
       ${p.admin ? '<div class="card" style="margin-top:12px;border-color:var(--yellow)">🛠 <b>Режим создателя</b><br><span style="color:var(--muted);font-weight:700">Все уроки открыты, жизни бесконечные. В рейтинге тебя не видно — чтобы не мешать ученикам. Статистика — команда /stats в боте.</span></div>' : ''}
-      ${p.plus ? `<div class="card plus-status ${p.plusDays <= 3 ? 'ending' : ''}"><div>👑 <b>Питоша Плюс</b><br><span>${p.plusDays <= 3 ? '⏳ ' : ''}Закончится через ${p.plusDays} ${days(p.plusDays)} · до ${new Date(p.plusUntil).toLocaleDateString('ru-RU')}</span></div>
+      ${p.plus && p.plusDays > 3650 ? '<div class="card plus-status"><div>👑 <b>Питоша Плюс</b><br><span>Навсегда</span></div></div>'
+        : p.plus ? `<div class="card plus-status ${p.plusDays <= 3 ? 'ending' : ''}"><div>👑 <b>Питоша Плюс</b><br><span>${p.plusDays <= 3 ? '⏳ ' : ''}Закончится через ${p.plusDays} ${days(p.plusDays)} · до ${new Date(p.plusUntil).toLocaleDateString('ru-RU')}</span></div>
           <button class="price" data-act="renew">Продлить</button></div>`
         : `<div class="card" style="margin-top:12px">❤️ ${p.hearts < C.MAX_HEARTS ? `Жизней: ${p.hearts}/${C.MAX_HEARTS}, новая через ${mins(p.nextHeartMs)}` : 'Все жизни на месте'}
           <button class="link-btn" data-act="renew">👑 Безлимит жизней с Плюсом</button></div>`}
@@ -369,7 +370,7 @@
   function shopScreen() {
     const p = S.player, promo = S.promo;
     return `<div class="screen"><h2 class="title">Магазин</h2>
-      <div class="card plus-card"><div class="plus-head">👑 <b>Питоша Плюс</b>${p.plus ? `<span class="plus-left">ещё ${p.plusDays} ${days(p.plusDays)}</span>` : ''}</div>
+      <div class="card plus-card"><div class="plus-head">👑 <b>Питоша Плюс</b>${p.plus ? `<span class="plus-left">${p.plusDays > 3650 ? 'навсегда' : `ещё ${p.plusDays} ${days(p.plusDays)}`}</span>` : ''}</div>
         <ul class="perks"><li>❤️ Безлимитные жизни — учись сколько хочешь</li><li>🧪 Песочница — пиши любой код в телефоне</li><li>🎨 Эксклюзивные темы оформления</li></ul>
         ${promo && promo.available ? `<button class="promo" data-buy="plus_promo"><b>🎁 Акция для первых 100: месяц за ${C.SHOP.plus_promo.stars} ⭐</b><small>Осталось мест: ${promo.left}</small></button>` : ''}
         <div class="plans">${PLANS.map(pl => `<button class="plan ${pl.tag ? 'hot' : ''}" data-buy="${pl.id}">${pl.tag ? `<i>${pl.tag}</i>` : ''}<b>${pl.name}</b><span>${pl.price} ⭐</span><small>${pl.sub}</small></button>`).join('')}</div>
