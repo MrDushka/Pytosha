@@ -123,8 +123,9 @@
       p.cleanRunDay = today;
     }
     const streakUp = bumpStreak(p, now);
+    const streakGems = awardStreakGems(p, now); // рубеж серии: 10, 20, 30… дней — алмазы
     const ach = checkAchievements(p, now);
-    return { xp, gems, firstTime, perfect: mistakes === 0, streak: p.streak, streakUp, levelUp: level(p.xp) > lvlBefore, level: level(p.xp), ach };
+    return { xp, gems, streakGems, firstTime, perfect: mistakes === 0, streak: p.streak, streakUp, levelUp: level(p.xp) > lvlBefore, level: level(p.xp), ach };
   }
   // Учёт ответа: решённые задачи с кодом и верные ответы нужны для ачивок и заданий
   function recordAnswer(p, q, correct, now) {
@@ -195,25 +196,24 @@
     return { chest, gems };
   }
 
-  // ---------- Сундуки за серию (как в Duolingo): каждые 10 дней огонька — сундук с алмазами ----------
+  // ---------- Алмазы за серию (как в Duolingo): каждые 10 дней огонька — алмазы сразу ----------
   // 10 дней → 50 💎, 20 → 100, 30 → 150 … (до 500). Каждый рубеж — один раз за всё время.
   const STREAK_STEP = 10;
-  const streakChestGems = n => Math.min(500, n * 5);
-  const streakChestKind = n => (n >= 100 ? 'gold' : n >= 50 ? 'silver' : 'bronze');
-  function streakChest(p, now) {
+  const streakGemsFor = n => Math.min(500, n * 5);
+  // Сколько до следующей награды — для экрана
+  function streakReward(p, now) {
     const s = currentStreak(p, now);
-    const n = Math.floor(s / STREAK_STEP) * STREAK_STEP;
     const next = (Math.max(Math.floor(s / STREAK_STEP), Math.floor((p.streakChestMax || 0) / STREAK_STEP)) + 1) * STREAK_STEP;
-    const ready = n >= STREAK_STEP && n > (p.streakChestMax || 0)
-      ? { n, gems: streakChestGems(n), chest: streakChestKind(n) } : null;
-    return { streak: s, ready, next, nextGems: streakChestGems(next), nextChest: streakChestKind(next) };
+    return { streak: s, next, nextGems: streakGemsFor(next) };
   }
-  function claimStreakChest(p, now) {
-    const { ready } = streakChest(p, now);
-    if (!ready) return null;
-    p.streakChestMax = ready.n;
-    p.gems = (p.gems || 0) + ready.gems;
-    return ready;
+  // Дошёл до нового рубежа — алмазы начисляются сами
+  function awardStreakGems(p, now) {
+    const n = Math.floor(currentStreak(p, now) / STREAK_STEP) * STREAK_STEP;
+    if (n < STREAK_STEP || n <= (p.streakChestMax || 0)) return null;
+    p.streakChestMax = n;
+    const gems = streakGemsFor(n);
+    p.gems = (p.gems || 0) + gems;
+    return { n, gems };
   }
 
   // ---------- Алмазы: бесплатная сторона магазина ----------
@@ -388,7 +388,7 @@
     PLACEMENT_UNITS, placementQuestions, applyPlacement,
     NEWBIE_DAYS, ensureStart, newbieDaysLeft, isNewbie, unlimitedHearts,
     QUESTS, CHESTS, questsFor, questEvent, questStatus, claimQuest,
-    GEM_SHOP, buyWithGems, STREAK_STEP, streakChest, claimStreakChest,
+    GEM_SHOP, buyWithGems, STREAK_STEP, streakReward, awardStreakGems,
     REF_DAYS, REF_PLUS_DAYS, referralReady, grantPlusDays, makeCode, cleanCode, RACE_DAYS, RACE_PRIZE, RACE_PRIZE_DRAW,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.CORE = api;

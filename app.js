@@ -303,7 +303,6 @@
       html += `<div class="card banner newbie"><span class="b-ico">🐣</span><span class="b-text"><b>Режим новичка</b>
         <small>Ещё ${p.newbieDays} ${days(p.newbieDays)} жизни не тратятся — ошибайся смело!</small></span></div>`;
     }
-    html += streakChestCard(true); // сундук за серию готов — показываем сразу
     // Ежедневный бонус: 7 дней по кругу
     if (p.daily) {
       const d = p.daily.day;
@@ -359,7 +358,7 @@
         : `<div class="card" style="margin-top:12px">❤️ ${p.hearts < C.MAX_HEARTS ? `Жизней: ${p.hearts}/${C.MAX_HEARTS}, новая через ${mins(p.nextHeartMs)}` : 'Все жизни на месте'}
           <button class="link-btn" data-act="renew">👑 Безлимит жизней с Плюсом</button></div>`}
       ${p.freezes ? `<div class="card">🧊 Заморозок серии: ${p.freezes}</div>` : ''}
-      <h3 class="sub">🎁 Сундуки за серию</h3>${streakChestCard()}
+      <h3 class="sub">🔥 Алмазы за серию</h3>${streakRewardCard()}
       <h3 class="sub">🏅 Ачивки · ${Object.keys(p.ach || {}).length}/${C.ACHIEVEMENTS.length}</h3>
       <div class="ach-grid">${C.ACHIEVEMENTS.map(a => { const got = p.ach && p.ach[a.id];
         return `<div class="ach ${got ? 'got' : ''}" title="${esc(a.desc)}"><span>${got ? a.ico : '🔒'}</span><b>${esc(a.title)}</b><small>${esc(a.desc)}</small></div>`; }).join('')}</div>
@@ -396,7 +395,7 @@
     const seg = `<div class="seg"><button class="${S.shopSide !== 'gems' ? 'on' : ''}" data-shop-side="stars">⭐ За звёзды</button><button class="${S.shopSide === 'gems' ? 'on' : ''}" data-shop-side="gems">💎 Бесплатно</button></div>`;
     if (S.shopSide === 'gems') {
       return `<div class="screen"><h2 class="title">Магазин</h2>${seg}
-        <div class="card gem-balance"><span>💎</span><div><b>${p.gems || 0} алмазов</b><small>1–10 за каждый урок, сундуки за задания, забеги и каждые 10 дней серии</small></div></div>
+        <div class="card gem-balance"><span>💎</span><div><b>${p.gems || 0} алмазов</b><small>1–10 за каждый урок, сундуки за задания и забеги, алмазы за каждые 10 дней серии</small></div></div>
         ${Object.entries(C.GEM_SHOP).map(([id, it]) => `<div class="card shop-item"><div class="ico">${it.title.split(' ')[0]}</div>
           <div class="info"><b>${esc(it.title.slice(it.title.indexOf(' ') + 1))}</b><small>${esc(it.description)}</small></div>
           <button class="price gem-price" data-gem-buy="${id}" ${(p.gems || 0) < it.gems ? 'disabled' : ''}>${it.gems} 💎</button></div>`).join('')}
@@ -437,28 +436,16 @@
   // ---------- Задания на день → сундуки ----------
   const CHEST_ICO = { bronze: '🟫', silver: '⬜', gold: '🟨' };
   const chestIco = kind => I({ bronze: 'chest_b', silver: 'chest_s', gold: 'chest_g' }[kind] || 'chest_b');
-  // ---------- Сундуки за серию: каждые 10 дней огонька ----------
-  function streakChestCard(compact) {
-    const sc = S.player.streakChest;
-    if (!sc) return '';
-    if (sc.ready) return `<div class="card streak-chest ready"><div class="sc-ico shake">${chestIco(sc.ready.chest)}</div>
-      <div class="sc-body"><b>Сундук за серию ${sc.ready.n} ${days(sc.ready.n)}!</b><small>Внутри ${sc.ready.gems} 💎 — забирай</small></div>
-      <button class="price" data-act="streak-chest">Открыть</button></div>`;
-    if (compact) return '';
-    const from = sc.next - C.STREAK_STEP, have = Math.max(0, sc.streak - from);
-    const marks = [0, 1, 2, 3].map(k => sc.next + k * C.STREAK_STEP);
-    return `<div class="card streak-chest"><div class="sc-ico">${chestIco(sc.nextChest)}</div>
-      <div class="sc-body"><b>🔥 ${sc.streak} → ${sc.next} ${days(sc.next)}</b><small>Сундук: ${sc.nextGems} 💎 · каждые ${C.STREAK_STEP} дней огонька</small>
+  // ---------- Алмазы за серию: каждые 10 дней огонька ----------
+  function streakRewardCard() {
+    const sr = S.player.streakReward;
+    if (!sr) return '';
+    const from = sr.next - C.STREAK_STEP, have = Math.max(0, sr.streak - from);
+    const marks = [0, 1, 2, 3].map(k => sr.next + k * C.STREAK_STEP);
+    return `<div class="card streak-reward"><div class="sc-ico">${I('gem')}</div>
+      <div class="sc-body"><b>🔥 ${sr.streak} → ${sr.next} ${days(sr.next)}</b><small>Награда: ${sr.nextGems} 💎 · каждые ${C.STREAK_STEP} дней огонька</small>
         <div class="q-bar"><i style="width:${(have / C.STREAK_STEP) * 100}%"></i><span>${have} / ${C.STREAK_STEP}</span></div>
-        <div class="sc-marks">${marks.map(m => `<span>${chestIco(m >= 100 ? 'gold' : m >= 50 ? 'silver' : 'bronze')}<em>${m}</em></span>`).join('')}</div></div></div>`;
-  }
-  async function openStreakChest() {
-    haptic();
-    const r = await api.streakChest();
-    if (r.player) S.player = r.player;
-    if (r.chest) { haptic('ok'); celebrate(); toast(`Сундук за ${r.chest.n} ${days(r.chest.n)} серии: +${r.chest.gems} 💎`); }
-    else toast('Этот сундук уже открыт');
-    render();
+        <div class="sc-marks">${marks.map(m => `<span>🔥<em>${m}</em> → ${Math.min(500, m * 5)} 💎</span>`).join('')}</div></div></div>`;
   }
   function questsScreen() {
     const st = S.player.quests;
@@ -467,7 +454,7 @@
       : done ? `<button class="chest ready" data-quest="${id}"><span class="shake">${chestIco(kind)}</span><small>Открыть</small></button>` : `<span class="chest locked">${chestIco(kind)}</span>`;
     return `<div class="screen"><h2 class="title">Задания на сегодня</h2>
       <p class="note" style="text-align:left;margin:-8px 0 12px">Новые задания — каждый день в полночь. За каждое — сундук с алмазами 💎</p>
-      ${streakChestCard()}
+      ${streakRewardCard()}
       ${st.list.map(q => `<div class="card quest ${q.done ? 'done' : ''}"><span class="q-ico">${q.ico}</span>
         <div class="q-body"><b>${esc(q.title)}</b><div class="q-bar"><i style="width:${(q.have / q.target) * 100}%"></i><span>${q.have} / ${q.target}</span></div></div>
         ${chestBtn(q.id, q.done, q.claimed, q.chest)}</div>`).join('')}
@@ -934,6 +921,7 @@
         <div class="reward g"><small>Точность</small><b>${acc}%</b></div>
       </div>
       ${f.levelUp ? `<p style="color:var(--yellow);font-size:18px">🆙 Новый уровень: ${f.level}!</p>` : ''}
+      ${f.streakGems ? `<div class="card streak-win">${I('fire')} <b>Серия ${f.streakGems.n} ${days(f.streakGems.n)}!</b> Награда: +${f.streakGems.gems} 💎</div>` : ''}
       ${f.streakUp && f.streak > 1 ? `<p>Серия ${f.streak} ${days(f.streak)} подряд — так держать!</p>` : ''}
       ${(f.ach || []).map(a => `<div class="ach-new"><span>${a.ico}</span><b>Новая ачивка: ${esc(a.title)}</b></div>`).join('')}
       <button class="share-btn" data-act="share">📤 Поделиться результатом</button>
@@ -1056,7 +1044,6 @@
     else if (d.place !== undefined) placementAnswer(d.place);
     else if (d.theme) pickTheme(d.theme);
     else if (d.act === 'daily') claimDaily();
-    else if (d.act === 'streak-chest') openStreakChest();
     else if (d.act === 'onb-new') { S.view = 'tabs'; S.tab = 'learn'; render(); }
     else if (d.act === 'onb-test') startPlacement();
     else if (d.act === 'share') shareResult();

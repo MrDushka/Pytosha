@@ -30,7 +30,6 @@
       placement: answers => post('/placement', { answers }),
       gemBuy: item => post('/gem_buy', { item }),
       questClaim: id => post('/quest_claim', { id }),
-      streakChest: () => post('/streak_chest'),
       friends: () => post('/friends'),
       friendAdd: code => post('/friend_add', { code }),
       friendRemove: id => post('/friend_remove', { id }),
@@ -63,7 +62,7 @@
         today: C.mskDay(now),
         gems: data.player.gems || 0, newbieDays: C.newbieDaysLeft(data.player, now),
         quests: C.questStatus(data.player, now), refLink: 'https://t.me/pythonshkabot?start=ref_demo',
-        streakChest: C.streakChest(data.player, now),
+        streakReward: C.streakReward(data.player, now),
       };
     };
     // Демо-друзья и забеги — чтобы посмотреть экран без сервера
@@ -122,12 +121,6 @@
         const res = C.buyWithGems(data.player, item, new Date());
         if (!res.error) save();
         return ok({ ...res, player: view() });
-      },
-      streakChest() {
-        const got = C.claimStreakChest(data.player, new Date());
-        if (!got) return ok({ error: 'not_ready', player: view() });
-        save();
-        return ok({ chest: got, player: view() });
       },
       questClaim(id) {
         const got = C.claimQuest(data.player, new Date(), id);

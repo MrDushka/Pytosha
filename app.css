@@ -355,7 +355,7 @@ h3.sub { font-size: 18px; font-weight: 900; margin: 18px 0 10px; }
 .shake { display: inline-block; animation: chest-shake 1.6s ease-in-out infinite; transform-origin: 50% 90%; }
 @keyframes chest-shake { 0%, 60%, 100% { transform: rotate(0) scale(1); } 66% { transform: rotate(-9deg) scale(1.06); } 74% { transform: rotate(8deg) scale(1.06); } 82% { transform: rotate(-5deg); } 90% { transform: rotate(3deg); } }
 @media (prefers-reduced-motion: reduce) { .shake { animation: none; } }
-.streak-chest { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.streak-chest, .streak-reward, .streak-win { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .streak-chest.ready { border-color: var(--yellow); background: color-mix(in srgb, var(--yellow) 12%, var(--card)); }
 .sc-ico { flex: none; }
 .sc-ico .ic { width: 52px; height: 52px; }
@@ -365,3 +365,5 @@ h3.sub { font-size: 18px; font-weight: 900; margin: 18px 0 10px; }
 .sc-marks span { display: flex; align-items: center; gap: 3px; font-weight: 900; font-size: 13px; color: var(--muted); }
 .sc-marks .ic { width: 22px; height: 22px; }
 .sc-marks em { font-style: normal; }
+.streak-win { align-items: center; gap: 8px; justify-content: center; border-color: #ff9f43; font-weight: 800; }
+.streak-win .ic { width: 26px; height: 26px; }
