@@ -137,17 +137,34 @@
   // ---------- Задания на день → сундуки с алмазами ----------
   // Каждый день у всех 3 задания из списка. За каждое — сундук, за все три — большой сундук.
   const QUESTS = [
-    { id: 'lessons2', type: 'lessons', target: 2, ico: '📘', title: 'Пройди 2 урока', chest: 'bronze' },
-    { id: 'lessons3', type: 'lessons', target: 3, ico: '📚', title: 'Пройди 3 урока', chest: 'silver' },
-    { id: 'perfect1', type: 'perfect', target: 1, ico: '✨', title: 'Пройди урок без ошибок', chest: 'silver' },
-    { id: 'correct15', type: 'correct', target: 15, ico: '✅', title: 'Ответь верно на 15 вопросов', chest: 'bronze' },
-    { id: 'correct25', type: 'correct', target: 25, ico: '🎯', title: 'Ответь верно на 25 вопросов', chest: 'silver' },
-    { id: 'code1', type: 'code', target: 1, ico: '💻', title: 'Реши задачу с кодом', chest: 'bronze' },
-    { id: 'code2', type: 'code', target: 2, ico: '⌨️', title: 'Реши 2 задачи с кодом', chest: 'silver' },
-    { id: 'xp30', type: 'xp', target: 30, ico: '⭐', title: 'Заработай 30 XP', chest: 'bronze' },
-    { id: 'xp60', type: 'xp', target: 60, ico: '🌟', title: 'Заработай 60 XP', chest: 'silver' },
+    { id: 'lessons2', type: 'lessons', target: 2, ico: '📘', title: 'Пройди 2 урока', chest: 'common' },
+    { id: 'lessons3', type: 'lessons', target: 3, ico: '📚', title: 'Пройди 3 урока', chest: 'rare' },
+    { id: 'perfect1', type: 'perfect', target: 1, ico: '✨', title: 'Пройди урок без ошибок', chest: 'rare' },
+    { id: 'correct15', type: 'correct', target: 15, ico: '✅', title: 'Ответь верно на 15 вопросов', chest: 'common' },
+    { id: 'correct25', type: 'correct', target: 25, ico: '🎯', title: 'Ответь верно на 25 вопросов', chest: 'rare' },
+    { id: 'code1', type: 'code', target: 1, ico: '💻', title: 'Реши задачу с кодом', chest: 'common' },
+    { id: 'code2', type: 'code', target: 2, ico: '⌨️', title: 'Реши 2 задачи с кодом', chest: 'rare' },
+    { id: 'xp30', type: 'xp', target: 30, ico: '⭐', title: 'Заработай 30 XP', chest: 'common' },
+    { id: 'xp60', type: 'xp', target: 60, ico: '🌟', title: 'Заработай 60 XP', chest: 'rare' },
   ];
-  const CHESTS = { bronze: [10, 25], silver: [20, 40], gold: [40, 80] }; // алмазы: от и до
+  // Сундуки как в Duolingo: 4 редкости. Сундук может «улучшиться» на ступень выше — это сюрприз при открытии.
+  const RARITIES = ['common', 'rare', 'epic', 'legendary'];
+  const QUEST_CHESTS = ['common', 'epic', 'legendary'];
+  const CHESTS = {
+    common: { name: 'Обычный', gems: [10, 25] },
+    rare: { name: 'Редкий', gems: [25, 50] },
+    epic: { name: 'Эпический', gems: [50, 100] },
+    legendary: { name: 'Легендарный', gems: [100, 200] },
+  };
+  // Любой сундук, кроме легендарного, с шансом 25% улучшается на одну ступень
+  const UPGRADE_CHANCE = 0.25;
+  function rollChest(base, rnd = Math.random) {
+    let k = Math.max(0, RARITIES.indexOf(base));
+    if (k < RARITIES.length - 1 && rnd() < UPGRADE_CHANCE) k += 1;
+    const rarity = RARITIES[Math.min(k, RARITIES.length - 1)];
+    const [lo, hi] = CHESTS[rarity].gems;
+    return { chest: rarity, gems: lo + Math.floor(rnd() * (hi - lo + 1)) };
+  }
   function seeded(text) {
     let seed = 0;
     for (const ch of text) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
@@ -172,9 +189,10 @@
   }
   function questStatus(p, now) {
     const Q = questDay(p, now);
-    const list = questsFor(Q.day).map(q => {
+    // Сундуки заданий дня: одно — обычный, одно — эпический, одно — легендарный
+    const list = questsFor(Q.day).map((q, i) => {
       const have = Math.min(q.target, Q.progress[q.type] || 0);
-      return { ...q, have, done: have >= q.target, claimed: !!Q.claimed[q.id] };
+      return { ...q, chest: QUEST_CHESTS[i], have, done: have >= q.target, claimed: !!Q.claimed[q.id] };
     });
     const allDone = list.every(q => q.done);
     return { day: Q.day, list, all: { done: allDone, claimed: !!Q.claimed.all } };
@@ -183,17 +201,16 @@
   function claimQuest(p, now, id, rnd = Math.random) {
     const st = questStatus(p, now);
     let chest;
-    if (id === 'all') { if (!st.all.done || st.all.claimed) return null; chest = 'gold'; }
+    if (id === 'all') { if (!st.all.done || st.all.claimed) return null; chest = 'epic'; }
     else {
       const q = st.list.find(x => x.id === id);
       if (!q || !q.done || q.claimed) return null;
       chest = q.chest;
     }
-    const [lo, hi] = CHESTS[chest];
-    const gems = lo + Math.floor(rnd() * (hi - lo + 1));
+    const got = rollChest(chest, rnd);
     p.quests.claimed[id] = true;
-    p.gems = (p.gems || 0) + gems;
-    return { chest, gems };
+    p.gems = (p.gems || 0) + got.gems;
+    return got;
   }
 
   // ---------- Алмазы за серию (как в Duolingo): каждые 10 дней огонька — алмазы сразу ----------
@@ -237,9 +254,9 @@
   }
 
   // ---------- Друзья и приглашения ----------
-  // Пригласил друга → неделя Плюса, когда друг что-нибудь купит или позанимается 10 дней
-  const REF_DAYS = 10, REF_PLUS_DAYS = 7;
-  const referralReady = p => !!(p.referredBy && !p.refPaid && ((p.purchases || 0) > 0 || (p.activeDays || 0) >= REF_DAYS));
+  // Пригласил друга → 1 день Плюса, когда друг позанимается 3 дня (просто перейти по ссылке мало)
+  const REF_DAYS = 3, REF_PLUS_DAYS = 1;
+  const referralReady = p => !!(p.referredBy && !p.refPaid && (p.activeDays || 0) >= REF_DAYS);
   function grantPlusDays(p, days, now) {
     const from = hasPlus(p, now) ? new Date(p.plusUntil) : now;
     p.plusUntil = new Date(from.getTime() + days * 86400000).toISOString();
@@ -248,8 +265,32 @@
   const CODE_ABC = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // без похожих 0/O и 1/I
   function makeCode(rnd = Math.random, len = 6) { let s = ''; for (let k = 0; k < len; k++) s += CODE_ABC[Math.floor(rnd() * CODE_ABC.length)]; return s; }
   const cleanCode = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
-  // Дружеский забег: кто наберёт больше XP за 3 дня. Победителю — сундук.
-  const RACE_DAYS = 3, RACE_PRIZE = 50, RACE_PRIZE_DRAW = 25;
+  // ---------- Дружеский забег (как «дружеская серия» в Duolingo) ----------
+  // До 5 забегов. Забег продлевается на день, когда ОБА друга прошли хотя бы 1 урок.
+  // Если день прошёл, а кто-то не занимался, — забег сгорает. На рубежах — сундуки обоим.
+  const FSTREAK_MAX = 5;
+  const FSTREAK_GOALS = [[3, 'common'], [7, 'rare'], [14, 'epic'], [30, 'legendary'], [50, 'legendary'], [100, 'legendary']];
+  // Жив ли забег: последний день продления (или старт) — сегодня или вчера
+  function fstreakAlive(s, today) {
+    if (s.status === 'ended') return false;
+    if (s.status === 'pending') return true;
+    const base = s.last_day || s.start_day;
+    return !!base && (base === today || base === prevDay(today));
+  }
+  // Ученик прошёл урок: отмечаем его сторону и продлеваем, если оба уже занимались сегодня
+  function fstreakMark(s, side, today) {
+    if (s.status !== 'active' || !fstreakAlive(s, today)) return false;
+    s[side + '_day'] = today;
+    if (s.a_day === today && s.b_day === today && s.last_day !== today) { s.days++; s.last_day = today; return true; }
+    return false;
+  }
+  // Сундук, который сторона может забрать: самый высокий пройденный рубеж, который ещё не забирали
+  function fstreakReward(s, side) {
+    const got = s[side + '_reward'] || 0;
+    const goal = FSTREAK_GOALS.filter(([n]) => n <= s.days && n > got).pop();
+    return goal ? { n: goal[0], chest: goal[1] } : null;
+  }
+  const fstreakNext = days => (FSTREAK_GOALS.find(([n]) => n > days) || [null])[0];
 
   // ---------- Ачивки ----------
   const doneCount = p => Object.values(p.done || {}).filter(d => !d.skipped).length;
@@ -389,7 +430,8 @@
     NEWBIE_DAYS, ensureStart, newbieDaysLeft, isNewbie, unlimitedHearts,
     QUESTS, CHESTS, questsFor, questEvent, questStatus, claimQuest,
     GEM_SHOP, buyWithGems, STREAK_STEP, streakReward, awardStreakGems,
-    REF_DAYS, REF_PLUS_DAYS, referralReady, grantPlusDays, makeCode, cleanCode, RACE_DAYS, RACE_PRIZE, RACE_PRIZE_DRAW,
+    REF_DAYS, REF_PLUS_DAYS, referralReady, grantPlusDays, makeCode, cleanCode,
+    RARITIES, QUEST_CHESTS, UPGRADE_CHANCE, rollChest, FSTREAK_MAX, FSTREAK_GOALS, fstreakAlive, fstreakMark, fstreakReward, fstreakNext,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.CORE = api;
 })(typeof self !== 'undefined' ? self : this);

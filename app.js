@@ -433,9 +433,23 @@
     render();
   }
 
-  // ---------- Задания на день → сундуки ----------
-  const CHEST_ICO = { bronze: '🟫', silver: '⬜', gold: '🟨' };
-  const chestIco = kind => I({ bronze: 'chest_b', silver: 'chest_s', gold: 'chest_g' }[kind] || 'chest_b');
+  // ---------- Сундуки: 4 редкости, как в Duolingo ----------
+  const CHEST_NAME = { common: 'Обычный', rare: 'Редкий', epic: 'Эпический', legendary: 'Легендарный' };
+  const chestIco = kind => I({ common: 'chest_c', rare: 'chest_r', epic: 'chest_e', legendary: 'chest_l' }[kind] || 'chest_c');
+  // Открытие сундука: трясётся → открывается → редкость и алмазы
+  function showChest(got, title) {
+    haptic('ok');
+    const box = document.createElement('div');
+    box.className = 'chest-pop ' + got.chest;
+    box.innerHTML = svgify(`<div class="cp-card"><div class="cp-title">${esc(title || 'Сундук')}</div>
+      <div class="cp-chest shake">${chestIco(got.chest)}</div>
+      <div class="cp-reveal"><div class="cp-rarity">${CHEST_NAME[got.chest] || ''}</div><div class="cp-gems">+${got.gems} 💎</div></div>
+      <button class="big">Забрать</button></div>`);
+    document.body.appendChild(box);
+    setTimeout(() => { box.classList.add('opened'); if (got.chest === 'epic' || got.chest === 'legendary') celebrate(); }, 900);
+    box.addEventListener('click', () => box.remove());
+  }
+
   // ---------- Алмазы за серию: каждые 10 дней огонька ----------
   function streakRewardCard() {
     const sr = S.player.streakReward;
@@ -447,81 +461,98 @@
         <div class="q-bar"><i style="width:${(have / C.STREAK_STEP) * 100}%"></i><span>${have} / ${C.STREAK_STEP}</span></div>
         <div class="sc-marks">${marks.map(m => `<span>🔥<em>${m}</em> → ${Math.min(500, m * 5)} 💎</span>`).join('')}</div></div></div>`;
   }
+
+  // ---------- Задания на день → сундуки ----------
   function questsScreen() {
     const st = S.player.quests;
     if (!st) return '<div class="screen"><h2 class="title">Задания</h2><p class="note">Загружаю…</p></div>';
     const chestBtn = (id, done, claimed, kind) => claimed ? `<span class="chest open">${I('chest_open')}</span>`
       : done ? `<button class="chest ready" data-quest="${id}"><span class="shake">${chestIco(kind)}</span><small>Открыть</small></button>` : `<span class="chest locked">${chestIco(kind)}</span>`;
     return `<div class="screen"><h2 class="title">Задания на сегодня</h2>
-      <p class="note" style="text-align:left;margin:-8px 0 12px">Новые задания — каждый день в полночь. За каждое — сундук с алмазами 💎</p>
+      <p class="note" style="text-align:left;margin:-8px 0 12px">Новые задания — каждый день в полночь. За каждое — сундук: обычный, эпический и легендарный. Любой, кроме легендарного, с шансом 25% станет лучше! ✨</p>
       ${streakRewardCard()}
       ${st.list.map(q => `<div class="card quest ${q.done ? 'done' : ''}"><span class="q-ico">${q.ico}</span>
-        <div class="q-body"><b>${esc(q.title)}</b><div class="q-bar"><i style="width:${(q.have / q.target) * 100}%"></i><span>${q.have} / ${q.target}</span></div></div>
+        <div class="q-body"><b>${esc(q.title)}</b><div class="q-bar"><i style="width:${(q.have / q.target) * 100}%"></i><span>${q.have} / ${q.target}</span></div>
+        <small class="rarity ${q.chest}">${CHEST_NAME[q.chest]} сундук</small></div>
         ${chestBtn(q.id, q.done, q.claimed, q.chest)}</div>`).join('')}
       <div class="card quest final ${st.all.done ? 'done' : ''}"><span class="q-ico">🏆</span><div class="q-body"><b>Выполни все 3 задания</b>
-        <small>Большой золотой сундук: до 80 💎</small></div>${chestBtn('all', st.all.done, st.all.claimed, 'gold')}</div></div>`;
+        <small class="rarity epic">Эпический сундук — может стать легендарным!</small></div>${chestBtn('all', st.all.done, st.all.claimed, 'epic')}</div>
+      <div class="card chest-legend">${C.RARITIES.map(k => `<span>${chestIco(k)}<b class="rarity ${k}">${CHEST_NAME[k]}</b><small>${C.CHESTS[k].gems[0]}–${C.CHESTS[k].gems[1]} 💎</small></span>`).join('')}</div></div>`;
   }
   async function claimQuestChest(id) {
     haptic();
     const r = await api.questClaim(id);
     if (r.player) S.player = r.player;
-    if (r.chest) { haptic('ok'); celebrate(); toast(`Сундук открыт: +${r.chest.gems} 💎`); }
     render();
+    if (r.chest) showChest(r.chest, id === 'all' ? 'Большой сундук' : 'Сундук за задание');
   }
 
-  // ---------- Друзья: приглашения и дружеские забеги ----------
+  // ---------- Друзья (как в Duolingo): поиск по нику, подписка, взаимная подписка = друзья ----------
+  const loadFriends = () => api.friends().then(r => { S.fr = r.error ? { friends: [], requests: [], sent: [], streaks: [] } : r; if (r.player) S.player = r.player; if (S.tab === 'friends') render(); });
+  const relBtn = p => {
+    if (p.relation === 'friend') return '<span class="tag-ok">Друзья ✓</span>';
+    if (p.relation === 'following') return '<span class="tag-wait">Ждём ответа</span>';
+    return `<button class="price small" data-follow="${p.id}">${p.relation === 'follower' ? 'Подписаться в ответ' : 'Подписаться'}</button>`;
+  };
+  const personRow = (p, right) => `<div class="row"><div class="row-av">${avatarHtml(p.avatar)}</div>
+    <div class="who">${esc(p.name)}<small class="sub-line">${p.username ? '@' + esc(p.username) + ' · ' : ''}⭐ ${p.xp} XP${p.streak ? ' · 🔥 ' + p.streak : ''}</small></div>${right}</div>`;
+  function streakCard(s) {
+    const f = s.friend;
+    if (s.status === 'pending') {
+      return `<div class="card fstreak pending"><div class="race-head">${avatarHtml(f.avatar)}<b>${esc(f.name)}</b>
+        <small>${s.invitedByMe ? 'ждём, когда друг примет' : 'зовёт тебя в забег!'}</small></div>
+        ${s.invitedByMe ? `<button class="big ghost" data-send="${s.id}">Отменить приглашение</button>`
+          : `<div class="two-btn"><button class="big green" data-saccept="${s.id}">Принять</button><button class="big ghost" data-sdecline="${s.id}">Отказаться</button></div>`}</div>`;
+    }
+    const both = s.meToday && s.friendToday;
+    return `<div class="card fstreak ${both ? 'done' : ''}"><div class="race-head">${avatarHtml(f.avatar)}<b>Ты и ${esc(f.name)}</b>
+        <span class="fs-days">🔥 ${s.days} ${days(s.days)}</span><button class="x-btn" data-send="${s.id}" aria-label="Закончить забег">✕</button></div>
+      <div class="fs-today"><span class="${s.meToday ? 'ok' : ''}">${s.meToday ? '✅' : '⏳'} Ты</span><span class="${s.friendToday ? 'ok' : ''}">${s.friendToday ? '✅' : '⏳'} ${esc(f.name)}</span>
+        <small>${both ? 'Сегодня забег продлён!' : 'Чтобы продлить, каждому нужно пройти хотя бы 1 урок сегодня'}</small></div>
+      ${s.reward ? `<button class="big green chest-btn" data-sclaim="${s.id}"><span class="shake">${chestIco(s.reward.chest)}</span> Открыть сундук за ${s.reward.n} ${days(s.reward.n)}</button>`
+        : s.next ? `<small class="fs-next">До сундука: ${s.next - s.days} ${days(s.next - s.days)} (рубеж ${s.next})</small>` : ''}</div>`;
+  }
   function friendsScreen() {
-    if (!S.fr) { api.friends().then(r => { S.fr = r.error ? { friends: [], races: [] } : r; if (r.player) S.player = r.player; if (S.tab === 'friends') render(); }); return '<div class="screen"><h2 class="title">Друзья</h2><p class="note">Загружаю…</p></div>'; }
-    const F = S.fr, now = Date.now();
-    const left = iso => { const ms = new Date(iso) - now, h = Math.ceil(ms / 3600000); return h > 24 ? `${Math.ceil(h / 24)} ${days(Math.ceil(h / 24))}` : `${h} ч`; };
-    const active = new Set(F.races.filter(x => !x.finished).map(x => x.opponent.id));
-    const races = F.races.filter(x => !x.finished || !x.claimed);
+    if (!S.fr) { loadFriends(); return '<div class="screen"><h2 class="title">Друзья</h2><p class="note">Загружаю…</p></div>'; }
+    const F = S.fr, inStreak = new Set(F.streaks.map(s => s.friend.id)), full = F.streaks.length >= C.FSTREAK_MAX;
     return `<div class="screen"><h2 class="title">Друзья</h2>
-      <div class="card invite"><b>🎁 Пригласи друга — получи неделю Плюса</b>
-        <small>Когда друг по твоей ссылке что-нибудь купит или позанимается ${C.REF_DAYS} дней, тебе — 7 дней Питоша Плюс. Друзей можно звать сколько угодно!${F.refRewards ? ` Уже получено: ${F.refRewards} 👑` : ''}</small>
-        <button class="big" data-act="invite">📨 Пригласить друга</button></div>
-      <div class="card add-friend"><b>Добавить по коду</b><small>Твой код: <button class="code-chip" data-act="copy-code" data-code="${esc(F.code || '')}">${esc(F.code || '…')} 📋</button></small>
-        <form id="friend-form" class="friend-row"><input class="answer-input" id="friend-code" maxlength="12" autocomplete="off" autocapitalize="characters" placeholder="Код друга"><button type="button" class="price" data-act="friend-add">Добавить</button></form></div>
-      ${races.length ? `<h3 class="sub">🏁 Забеги</h3>${races.map(x => `<div class="card race ${x.finished ? x.result : ''}">
-        <div class="race-head">${avatarHtml(x.opponent.avatar)}<b>Ты vs ${esc(x.opponent.name)}</b><small>${x.finished ? 'финиш' : 'ещё ' + left(x.endsAt)}</small></div>
-        <div class="race-bars"><div><span>Ты</span><i style="width:${Math.min(100, (x.mine / Math.max(1, x.mine, x.theirs)) * 100)}%"></i><b>${x.mine} XP</b></div>
-          <div><span>${esc(x.opponent.name)}</span><i class="them" style="width:${Math.min(100, (x.theirs / Math.max(1, x.mine, x.theirs)) * 100)}%"></i><b>${x.theirs} XP</b></div></div>
-        ${x.finished ? `<button class="big ${x.result === 'win' ? 'green' : ''}" data-race-claim="${x.id}">${x.result === 'win' ? '🏆 Победа! Забрать сундук' : x.result === 'draw' ? '🤝 Ничья — забрать сундук' : '💪 Почти! Забрать утешительный приз'}</button>` : ''}</div>`).join('')}` : ''}
+      <div class="card add-friend"><b>🔎 Найди друга</b><small>По имени в Питоше или по @нику в Telegram. Подпишись — и когда он подпишется в ответ, вы станете друзьями.</small>
+        <form id="friend-form" class="friend-row"><input class="answer-input" id="friend-q" maxlength="32" autocomplete="off" placeholder="Имя или @ник" value="${esc(S.frq || '')}"><button type="button" class="price" data-act="friend-search">Найти</button></form>
+        ${S.frs ? (S.frs.length ? `<div class="search-res">${S.frs.map(p => personRow(p, relBtn(p))).join('')}</div>` : '<p class="note">Никого не нашли 🤔 Проверь имя или позови друга по ссылке ниже.</p>') : ''}</div>
+      ${F.requests.length ? `<h3 class="sub">👋 Подписались на тебя · ${F.requests.length}</h3><div class="card">${F.requests.map(p => personRow(p, relBtn({ ...p, relation: 'follower' }))).join('')}</div>` : ''}
+      <h3 class="sub">🏁 Дружеские забеги · ${F.streaks.length}/${C.FSTREAK_MAX}</h3>
+      ${F.streaks.length ? F.streaks.map(streakCard).join('') : '<p class="note">Позови друга в забег: каждый день, когда вы оба проходите хотя бы 1 урок, забег растёт. За 3, 7, 14, 30 дней — сундуки обоим!</p>'}
       <h3 class="sub">👥 Мои друзья · ${F.friends.length}</h3>
-      ${F.friends.length ? `<div class="card">${F.friends.map(f => `<div class="row"><div class="row-av">${avatarHtml(f.avatar)}</div>
-        <div class="who">${esc(f.name)}<small class="sub-line">⭐ ${f.xp} XP · 🔥 ${f.streak}</small></div>
-        <button class="price small" data-race="${f.id}" ${active.has(f.id) ? 'disabled' : ''}>${active.has(f.id) ? 'Идёт забег' : '🏁 Забег'}</button>
-        <button class="x-btn" data-unfriend="${f.id}" aria-label="Удалить из друзей">✕</button></div>`).join('')}</div>`
-        : '<p class="note">Пока никого. Пригласи друга по ссылке или добавь по коду — и вызови на забег: кто наберёт больше XP за 3 дня, получит сундук 💎</p>'}</div>`;
+      ${F.friends.length ? `<div class="card">${F.friends.map(p => personRow(p, `<button class="price small" data-sinvite="${p.id}" ${inStreak.has(p.id) || full ? 'disabled' : ''}>${inStreak.has(p.id) ? 'В забеге' : '🏁 Забег'}</button>
+        <button class="x-btn" data-unfollow="${p.id}" aria-label="Удалить из друзей">✕</button>`)).join('')}</div>`
+        : '<p class="note">Пока никого. Найди друга по нику выше или пригласи по ссылке.</p>'}
+      ${F.sent.length ? `<h3 class="sub">⏳ Ты подписан, ждём ответа</h3><div class="card">${F.sent.map(p => personRow(p, `<button class="x-btn" data-unfollow="${p.id}" aria-label="Отписаться">✕</button>`)).join('')}</div>` : ''}
+      <div class="card invite"><b>🎁 Пригласи друга — 1 день Плюса за каждого</b>
+        <small>Отправь другу свою ссылку. Просто перейти по ней мало: когда друг позанимается ${C.REF_DAYS} дня, тебе — 1 день Питоша Плюс. Звать можно сколько угодно друзей!${F.refRewards ? ` Уже получено: ${F.refRewards} 👑` : ''}</small>
+        <button class="big" data-act="invite">📨 Пригласить друга</button></div></div>`;
   }
-  async function addFriend() {
-    const inp = document.getElementById('friend-code');
-    const code = inp ? inp.value : '';
-    if (!C.cleanCode(code)) return toast('Введи код друга');
-    const r = await api.friendAdd(code);
-    const msg = { bad_code: 'Код слишком короткий', not_found: 'Нет ученика с таким кодом 🤔', self: 'Это твой собственный код 🙂' }[r.error];
-    if (r.error) { haptic('bad'); return toast(msg || 'Не получилось добавить'); }
-    haptic('ok'); toast(`🤝 ${r.name} теперь в друзьях!`);
-    S.fr = null; render();
+  async function searchFriends() {
+    const inp = document.getElementById('friend-q');
+    S.frq = inp ? inp.value.trim() : '';
+    if (S.frq.replace(/^@/, '').length < 2) return toast('Напиши хотя бы 2 буквы имени или @ник');
+    const r = await api.friendSearch(S.frq);
+    S.frs = r.list || [];
+    render();
   }
-  async function removeFriend(id) {
-    const go = async () => { await api.friendRemove(id); S.fr = null; render(); };
-    if (tg && tg.showConfirm) tg.showConfirm('Удалить из друзей?', ok => { if (ok) go(); }); else if (confirm('Удалить из друзей?')) go();
-  }
-  async function startRace(id) {
+  async function frAction(call, okMsg) {
     haptic();
-    const r = await api.raceStart(id);
-    if (r.error === 'already') toast('С этим другом уже идёт забег');
-    else if (r.error) toast('Не получилось начать забег');
-    else { toast(`🏁 Забег начался! ${C.RACE_DAYS} дня — кто наберёт больше XP`); celebrate(); }
-    S.fr = null; render();
-  }
-  async function claimRace(id) {
-    const r = await api.raceClaim(id);
+    const r = await call();
+    const msg = { not_found: 'Ученик не найден', not_friend: 'Забег можно начать только с другом', already: 'С этим другом уже есть забег',
+      max: `Можно не больше ${C.FSTREAK_MAX} забегов`, friend_max: `У друга уже ${C.FSTREAK_MAX} забегов`, claimed: 'Этот сундук уже открыт' }[r.error];
+    if (r.friends) S.fr = r;
     if (r.player) S.player = r.player;
-    if (r.gems) { haptic('ok'); celebrate(); toast(`🎁 +${r.gems} 💎`); } else toast('Приз уже получен');
-    S.fr = null; render();
+    if (r.error) { haptic('bad'); toast(msg || 'Не получилось, попробуй ещё раз'); }
+    else if (okMsg) toast(typeof okMsg === 'function' ? okMsg(r) : okMsg);
+    if (S.frs && r.friends) { const rel = new Map([...r.friends.map(p => [p.id, 'friend']), ...r.sent.map(p => [p.id, 'following']), ...r.requests.map(p => [p.id, 'follower'])]); S.frs = S.frs.map(p => ({ ...p, relation: rel.get(p.id) || 'none' })); }
+    render();
+    return r;
   }
+  function confirmThen(text, go) { if (tg && tg.showConfirm) tg.showConfirm(text, ok => { if (ok) go(); }); else if (confirm(text)) go(); }
 
   // ---------- Ещё: настройки ----------
   function moreScreen() {
@@ -988,7 +1019,7 @@
     const regInput = document.getElementById('reg-name');
     if (regInput) regInput.addEventListener('keydown', e => { if (e.key === 'Enter') saveProfile(); });
     const friendForm = document.getElementById('friend-form');
-    if (friendForm) friendForm.addEventListener('submit', e => { e.preventDefault(); addFriend(); });
+    if (friendForm) friendForm.addEventListener('submit', e => { e.preventDefault(); searchFriends(); });
     const photoInput = document.getElementById('photo-input');
     if (photoInput) photoInput.addEventListener('change', () => onPhotoPicked(photoInput));
     const input = document.getElementById('answer');
@@ -1029,14 +1060,17 @@
     else if (d.shopSide) { S.shopSide = d.shopSide; haptic(); render(); }
     else if (d.gemBuy) gemBuy(d.gemBuy);
     else if (d.quest) claimQuestChest(d.quest);
-    else if (d.race) startRace(Number(d.race));
-    else if (d.raceClaim) claimRace(Number(d.raceClaim));
-    else if (d.unfriend) removeFriend(Number(d.unfriend));
+    else if (d.follow) frAction(() => api.follow(Number(d.follow)), r => (r.friend ? '🤝 Теперь вы друзья!' : '👋 Подписка отправлена — ждём, когда друг подпишется в ответ'));
+    else if (d.unfollow) confirmThen('Удалить из друзей?', () => frAction(() => api.unfollow(Number(d.unfollow))));
+    else if (d.sinvite) frAction(() => api.streakInvite(Number(d.sinvite)), '🏁 Приглашение в забег отправлено!');
+    else if (d.saccept) frAction(() => api.streakAccept(Number(d.saccept)), '🏁 Забег начался! Пройдите сегодня хотя бы по 1 уроку');
+    else if (d.sdecline) frAction(() => api.streakDecline(Number(d.sdecline)));
+    else if (d.send) confirmThen('Закончить забег?', () => frAction(() => api.streakEnd(Number(d.send))));
+    else if (d.sclaim) frAction(() => api.streakClaim(Number(d.sclaim))).then(r => { if (r.chest) showChest(r.chest, `Забег: ${r.chest.n} ${days(r.chest.n)}`); });
     else if (d.snip) openSnippet(d.snip);
     else if (d.snipShare) shareLink(d.snipShare, 'Посмотри мою программу на Python 🐍');
-    else if (d.act === 'friend-add') addFriend();
-    else if (d.act === 'invite') shareLink(S.player.refLink, 'Учи Python вместе со мной в Питоше 🐍 По моей ссылке — сразу в друзья!');
-    else if (d.act === 'copy-code') copyText(d.code, 'Код скопирован');
+    else if (d.act === 'friend-search') searchFriends();
+    else if (d.act === 'invite') shareLink(S.player.refLink, 'Учи Python вместе со мной в Питоше 🐍 По моей ссылке мы сразу станем друзьями и сможем устроить дружеский забег!');
     else if (d.act === 'sb-save') saveSnippet();
     else if (d.act === 'snip-to-sandbox') { if (!canPlus()) { toast('🧪 Песочница — в Питоше Плюс'); S.tab = 'shop'; S.view = 'tabs'; render(); } else { S.sandbox = { code: S.snip.code, stdin: '', out: '', running: false }; store.set('pitosha-sandbox', S.snip.code); S.view = 'sandbox'; render(); } }
     else if (d.act === 'snip-run') runSnippet();

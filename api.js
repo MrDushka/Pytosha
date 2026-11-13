@@ -31,10 +31,14 @@
       gemBuy: item => post('/gem_buy', { item }),
       questClaim: id => post('/quest_claim', { id }),
       friends: () => post('/friends'),
-      friendAdd: code => post('/friend_add', { code }),
-      friendRemove: id => post('/friend_remove', { id }),
-      raceStart: friendId => post('/race_start', { friendId }),
-      raceClaim: raceId => post('/race_claim', { raceId }),
+      friendSearch: q => post('/friend_search', { q }),
+      follow: id => post('/follow', { id }),
+      unfollow: id => post('/unfollow', { id }),
+      streakInvite: id => post('/streak_invite', { id }),
+      streakAccept: id => post('/streak_accept', { id }),
+      streakDecline: id => post('/streak_decline', { id }),
+      streakEnd: id => post('/streak_end', { id }),
+      streakClaim: id => post('/streak_claim', { id }),
       snippetSave: code => post('/snippet_save', { code }),
       snippets: () => post('/snippets'),
       snippetGet: id => post('/snippet_get', { id }),
@@ -52,7 +56,6 @@
     const view = () => {
       const now = new Date();
       C.ensureStart(data.player, now);
-      if (!data.player.friendCode) data.player.friendCode = C.makeCode();
       C.refreshHearts(data.player, now);
       return {
         ...data.player, name: (data.player.profile && data.player.profile.name) || user.first_name, streakNow: C.currentStreak(data.player, now), nextHeartMs: C.nextHeartMs(data.player, now),
@@ -65,9 +68,21 @@
         streakReward: C.streakReward(data.player, now),
       };
     };
-    // Демо-друзья и забеги — чтобы посмотреть экран без сервера
-    data.friends = data.friends || [{ id: 1, name: 'Алиса', avatar: '🦊', xp: 340, streak: 5 }, { id: 2, name: 'Тимур', avatar: '🐯', xp: 210, streak: 2 }];
-    data.races = data.races || [];
+    // Демо-друзья и забеги — чтобы посмотреть экран без сервера. Я в забеге — сторона «a», друг — «b».
+    data.people = data.people || [{ id: 1, name: 'Алиса', username: 'alisa_py', avatar: '🦊', xp: 340, streak: 5 }, { id: 2, name: 'Тимур', username: 'timur', avatar: '🐯', xp: 210, streak: 2 },
+      { id: 3, name: 'Соня', username: 'sonya', avatar: '🦄', xp: 120, streak: 1 }, { id: 4, name: 'Макс', username: 'max_code', avatar: '🤖', xp: 40, streak: 0 }];
+    data.following = data.following || [1, 2];
+    data.followers = data.followers || [1, 2, 3];
+    data.fstreaks = data.fstreaks || [{ id: 1, friend: 1, status: 'pending', days: 0, a_reward: 0, b_reward: 0, invitedByMe: false }];
+    const relation = id => (data.following.includes(id) && data.followers.includes(id) ? 'friend' : data.following.includes(id) ? 'following' : data.followers.includes(id) ? 'follower' : 'none');
+    function demoFriends() {
+      const today = C.mskDay(new Date()), who = id => data.people.find(p => p.id === id);
+      data.fstreaks.forEach(s => { if (s.status !== 'ended' && !C.fstreakAlive(s, today)) s.status = 'ended'; });
+      const live = data.fstreaks.filter(s => s.status !== 'ended');
+      return { friends: data.people.filter(p => relation(p.id) === 'friend'), requests: data.people.filter(p => relation(p.id) === 'follower'), sent: data.people.filter(p => relation(p.id) === 'following'),
+        streaks: live.map(s => ({ id: s.id, status: s.status, days: s.days, invitedByMe: !!s.invitedByMe, friend: who(s.friend), meToday: s.a_day === today, friendToday: s.b_day === today,
+          reward: C.fstreakReward(s, 'a'), next: C.fstreakNext(s.days) })), refLink: view().refLink, refRewards: data.player.refRewards || 0, player: view() };
+    }
     data.snippets = data.snippets || [];
     const ok = x => Promise.resolve(x);
     return {
@@ -108,7 +123,10 @@
         s.i++;
         let finished = null, failed = false;
         if (!correct && data.player.hearts <= 0) { failed = true; data.session = null; }
-        else if (s.i >= lesson.questions.length) { finished = C.finishLesson(data.player, lesson, s, now); data.session = null; }
+        else if (s.i >= lesson.questions.length) {
+          finished = C.finishLesson(data.player, lesson, s, now); data.session = null;
+          data.fstreaks.forEach(x => C.fstreakMark(x, 'a', C.mskDay(now))); // забеги: моя часть на сегодня
+        }
         save();
         return ok({ correct, right: C.rightAnswer(q), explain: q.explain, finished, failed, player: view() });
       },
@@ -128,38 +146,57 @@
         save();
         return ok({ chest: got, player: view() });
       },
-      friends() {
-        const now = new Date();
-        const races = data.races.map(x => {
-          const o = data.friends.find(f => f.id === x.friend) || {};
-          const mine = data.player.xp - x.startXp, theirs = x.theirs;
-          return { id: x.id, opponent: { id: o.id, name: o.name, avatar: o.avatar }, mine, theirs, endsAt: x.endsAt, finished: new Date(x.endsAt) <= now, claimed: !!x.claimed, result: mine > theirs ? 'win' : mine < theirs ? 'lose' : 'draw' };
-        });
-        return ok({ friends: data.friends, races, code: data.player.friendCode, refLink: view().refLink, refRewards: data.player.refRewards || 0, player: view() });
+      // ---------- Друзья в демо: подписки, взаимная подписка = друзья, дружеские забеги ----------
+      friends: () => ok(demoFriends()),
+      friendSearch(q) {
+        const t = String(q || '').trim().toLowerCase().replace(/^@/, '');
+        const list = data.people.filter(p => p.name.toLowerCase().includes(t) || p.username === t);
+        return ok({ list: list.map(p => ({ ...p, relation: relation(p.id) })) });
       },
-      friendAdd(code) {
-        const c = C.cleanCode(code);
-        if (c.length < 4) return ok({ error: 'bad_code' });
-        if (c === data.player.friendCode) return ok({ error: 'self' });
-        if (c !== 'SONYA1') return ok({ error: 'not_found' });
-        if (!data.friends.some(f => f.id === 3)) data.friends.push({ id: 3, name: 'Соня', avatar: '🦄', xp: 120, streak: 1 });
+      follow(id) {
+        if (!data.people.some(p => p.id === id)) return ok({ error: 'not_found' });
+        if (!data.following.includes(id)) data.following.push(id);
         save();
-        return ok({ ok: true, name: 'Соня' });
+        return ok({ ok: true, friend: data.followers.includes(id), ...demoFriends() });
       },
-      friendRemove(id) { data.friends = data.friends.filter(f => f.id !== id); save(); return ok({ ok: true }); },
-      raceStart(friendId) {
-        if (data.races.some(x => x.friend === friendId && new Date(x.endsAt) > new Date())) return ok({ error: 'already' });
-        data.races.unshift({ id: Date.now(), friend: friendId, startXp: data.player.xp, theirs: 0, endsAt: new Date(Date.now() + C.RACE_DAYS * 86400000).toISOString() });
+      unfollow(id) {
+        data.following = data.following.filter(x => x !== id);
+        data.fstreaks.forEach(s => { if (s.friend === id) s.status = 'ended'; });
         save();
-        return ok({ ok: true });
+        return ok({ ok: true, ...demoFriends() });
       },
-      raceClaim(raceId) {
-        const x = data.races.find(r => r.id === raceId);
-        if (!x || x.claimed || new Date(x.endsAt) > new Date()) return ok({ error: 'not_ready' });
-        const mine = data.player.xp - x.startXp;
-        const gems = mine > x.theirs ? C.RACE_PRIZE : mine === x.theirs ? C.RACE_PRIZE_DRAW : 10;
-        x.claimed = true; data.player.gems = (data.player.gems || 0) + gems; save();
-        return ok({ gems, result: mine > x.theirs ? 'win' : mine === x.theirs ? 'draw' : 'lose', player: view() });
+      streakInvite(id) {
+        const F = demoFriends();
+        if (!F.friends.some(f => f.id === id)) return ok({ error: 'not_friend' });
+        if (F.streaks.some(s => s.friend.id === id)) return ok({ error: 'already' });
+        if (F.streaks.length >= C.FSTREAK_MAX) return ok({ error: 'max' });
+        // в демо друг сразу принимает и уже прошёл урок сегодня
+        data.fstreaks.push({ id: Date.now(), friend: id, status: 'active', days: 0, start_day: C.mskDay(new Date()), last_day: null, a_day: null, b_day: C.mskDay(new Date()), a_reward: 0, b_reward: 0, invitedByMe: true });
+        save();
+        return ok({ ok: true, ...demoFriends() });
+      },
+      streakAccept(id) {
+        const s = data.fstreaks.find(x => x.id === id);
+        if (!s || s.status !== 'pending') return ok({ error: 'not_found', ...demoFriends() });
+        s.status = 'active'; s.start_day = C.mskDay(new Date()); s.b_day = s.start_day; save();
+        return ok({ ok: true, ...demoFriends() });
+      },
+      streakDecline(id) { return this.streakEnd(id); },
+      streakEnd(id) {
+        const s = data.fstreaks.find(x => x.id === id);
+        if (s) s.status = 'ended';
+        save();
+        return ok({ ok: true, ...demoFriends() });
+      },
+      streakClaim(id) {
+        const s = data.fstreaks.find(x => x.id === id);
+        const goal = s && C.fstreakReward(s, 'a');
+        if (!goal) return ok({ error: 'claimed', ...demoFriends() });
+        s.a_reward = goal.n;
+        const got = C.rollChest(goal.chest);
+        data.player.gems = (data.player.gems || 0) + got.gems;
+        save();
+        return ok({ chest: { ...got, n: goal.n }, player: view(), ...demoFriends() });
       },
       snippetSave(code) {
         if (!String(code || '').trim()) return ok({ error: 'empty' });
@@ -179,7 +216,7 @@
         save();
         return ok({ player: view() });
       },
-      reset() { data = { player: C.newPlayer(), session: null, friends: [], races: [], snippets: [] }; save(); },
+      reset() { data = { player: C.newPlayer(), session: null, snippets: [] }; save(); },
     };
   }
 

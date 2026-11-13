@@ -73,6 +73,11 @@
     chest_b: chest('#c27a3e', '#8a5226', '#e0a36b'),
     chest_s: chest('#a9b7c6', '#6f7f91', '#dbe4ec'),
     chest_g: chest('#ffc800', '#d49a00', '#ffe066'),
+    // Редкости сундуков: обычный (дерево), редкий (синий), эпический (фиолетовый), легендарный (золото с блеском)
+    chest_c: chest('#b8814d', '#7a4e26', '#d9a777'),
+    chest_r: chest('#1cb0f6', '#0b6fa3', '#7fd6ff'),
+    chest_e: chest('#a560e8', '#6b2fa8', '#d7a8ff'),
+    chest_l: chest('#ffc800', '#d49a00', '#fff3a8') + '<path d="M20 2.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7zM3.5 3l.5 1.2 1.2.5-1.2.5-.5 1.2-.5-1.2-1.2-.5 1.2-.5z" fill="#fff7b0"/>',
     chest_open: `<path d="M3 11h18v8.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 19.5z" fill="#ffc800" ${D}/><path d="M4 11L2.5 4.5a1 1 0 0 1 1-1.2h17a1 1 0 0 1 1 1.2L20 11z" fill="#d49a00" ${D}/><path d="M7 11l2-4h6l2 4" fill="#1cb0f6"/><path d="M9 8.5l1.3-1.5h3.4L15 8.5l-3 3.5z" fill="#7fd6ff"/><path d="M3 14h18" stroke="#d49a00" stroke-width="1.6"/><path d="M5 2l.8 1.6M19 2l-.8 1.6M12 .5v2" stroke="#ffe066" stroke-width="1.4" stroke-linecap="round"/>`,
   };
   function chest(main, dark, light) {

@@ -367,3 +367,41 @@ h3.sub { font-size: 18px; font-weight: 900; margin: 18px 0 10px; }
 .sc-marks em { font-style: normal; }
 .streak-win { align-items: center; gap: 8px; justify-content: center; border-color: #ff9f43; font-weight: 800; }
 .streak-win .ic { width: 26px; height: 26px; }
+
+/* ---------- Сундуки 4 редкостей ---------- */
+.rarity { font-weight: 900; font-size: 12px; }
+.rarity.common { color: #d9a777; } .rarity.rare { color: #4fc3ff; } .rarity.epic { color: #c58cff; } .rarity.legendary { color: #ffd43b; }
+.chest-legend { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; text-align: center; margin-top: 12px; }
+.chest-legend span { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.chest-legend .ic { width: 34px; height: 34px; }
+.chest-legend small { color: var(--muted); font-weight: 800; font-size: 11px; }
+.chest-pop { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: rgba(4, 10, 24, .82); padding: 16px; }
+.cp-card { width: min(340px, 100%); text-align: center; background: var(--card); border: 3px solid var(--line); border-radius: 24px; padding: 22px 18px; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.cp-title { font-weight: 900; font-size: 18px; }
+.cp-chest .ic { width: 130px; height: 130px; }
+.cp-reveal { opacity: 0; transform: scale(.6); transition: opacity .35s, transform .35s cubic-bezier(.3, 1.6, .5, 1); }
+.chest-pop.opened .cp-reveal { opacity: 1; transform: scale(1); }
+.chest-pop.opened .cp-chest { animation: chest-burst .5s ease-out forwards; }
+@keyframes chest-burst { 0% { transform: scale(1); } 40% { transform: scale(1.25) rotate(-4deg); } 100% { transform: scale(1.05); } }
+.cp-rarity { font-weight: 900; font-size: 26px; }
+.cp-gems { font-weight: 900; font-size: 32px; color: #4fc3ff; }
+.chest-pop.common .cp-card { border-color: #b8814d; } .chest-pop.common .cp-rarity { color: #d9a777; }
+.chest-pop.rare .cp-card { border-color: #1cb0f6; box-shadow: 0 0 40px rgba(28, 176, 246, .35); } .chest-pop.rare .cp-rarity { color: #4fc3ff; }
+.chest-pop.epic .cp-card { border-color: #a560e8; box-shadow: 0 0 50px rgba(165, 96, 232, .45); } .chest-pop.epic .cp-rarity { color: #c58cff; }
+.chest-pop.legendary .cp-card { border-color: #ffc800; box-shadow: 0 0 60px rgba(255, 200, 0, .55); } .chest-pop.legendary .cp-rarity { color: #ffd43b; }
+.cp-card .big { width: 100%; }
+
+/* ---------- Друзья и забеги ---------- */
+.search-res { margin-top: 10px; }
+.tag-ok, .tag-wait { font-weight: 900; font-size: 12px; white-space: nowrap; }
+.tag-ok { color: var(--green); } .tag-wait { color: var(--muted); }
+.fstreak { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.fstreak.done { border-color: var(--green); }
+.fstreak.pending { border-color: var(--yellow); }
+.fs-days { margin-left: auto; font-weight: 900; color: #ff9f43; }
+.fs-today { display: flex; flex-wrap: wrap; gap: 8px 14px; font-weight: 800; }
+.fs-today .ok { color: var(--green); }
+.fs-today small, .fs-next { width: 100%; color: var(--muted); font-weight: 700; }
+.two-btn { display: flex; gap: 8px; } .two-btn .big { flex: 1; }
+.chest-btn { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.chest-btn .ic { width: 30px; height: 30px; }
