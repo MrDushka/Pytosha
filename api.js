@@ -27,6 +27,7 @@
       start: (lessonId, restart) => post('/start', { lessonId, restart: !!restart }),
       answer: (lessonId, qi, answer) => post('/answer', { lessonId, qi, answer }),
       top: () => post('/top'),
+      tournament: () => post('/tournament'),
       buy: item => post('/buy', { item }),
       profile: (name, avatar) => post('/profile', { name, avatar }),
       daily: () => post('/daily'),
@@ -141,6 +142,12 @@
         { name: 'Алиса', avatar: '🦊', xp: 340 }, { name: 'Тимур', avatar: '🐯', xp: 210 }, { name: 'Соня', avatar: '🦄', xp: 120 },
         { name: view().name, avatar: (data.player.profile || {}).avatar || '🐍', xp: data.player.xp, me: true }, { name: 'Макс', avatar: '🤖', xp: 40 },
       ].sort((a, b) => b.xp - a.xp) }),
+      tournament: () => {
+        const me = { place: 2, name: view().name, avatar: (data.player.profile || {}).avatar || '🐍', xp: C.weekXpNow(data.player, new Date()), me: true };
+        const list = [{ place: 1, name: 'Алиса', avatar: '🦊', xp: 180 }, me, { place: 3, name: 'Тимур', avatar: '🐯', xp: 95 }]
+          .sort((a, b) => b.xp - a.xp).map((u, i) => ({ ...u, place: i + 1 }));
+        return ok({ list, endsMs: C.weekEndsMs(new Date()), myXp: me.xp, lastWinner: { name: 'Соня', xp: 240 } });
+      },
       buy: () => ok({ error: 'demo' }),
       gemBuy(item) {
         const res = C.buyWithGems(data.player, item, new Date());

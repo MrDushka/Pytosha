@@ -396,14 +396,44 @@
   }
 
   // ---------- Рейтинг ----------
+  const medals = ['🥇', '🥈', '🥉'];
+  // «3д 4ч», «4ч 10м» или «8 мин» — сколько осталось до конца турнира
+  function leftStr(ms) {
+    const m = Math.max(0, Math.floor(ms / 60000)), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mm = m % 60;
+    if (d > 0) return `${d} дн ${h} ч`;
+    if (h > 0) return `${h} ч ${mm} мин`;
+    return `${mm} мин`;
+  }
+  function rankRow(u) {
+    return `<div class="row ${u.me ? 'me' : ''}"><div class="place">${medals[u.place - 1] || u.place}</div><div class="row-av">${avatarHtml(u.avatar || '🐍')}</div><div class="who">${esc(u.name)}${u.me ? ' (ты)' : ''}</div><div class="pts">${u.xp} XP</div></div>`;
+  }
   function topScreen() {
-    const seg = '';
-    if (!S.top) { api.top().then(r => { S.top = r.top || []; if (S.tab === 'top') render(); }); return `<div class="screen"><h2 class="title">Рейтинг</h2>${seg}<p class="note">Загружаю…</p></div>`; }
-    const medals = ['🥇', '🥈', '🥉'];
-    return `<div class="screen"><h2 class="title">Рейтинг</h2>${seg}<div class="card">${S.top.length ? S.top.map((u, i) =>
-      `<div class="row ${u.me ? 'me' : ''}"><div class="place">${medals[i] || u.place || i + 1}</div><div class="row-av">${avatarHtml(u.avatar || '🐍')}</div><div class="who">${esc(u.name)}${u.me ? ' (ты)' : ''}</div><div class="pts">${u.xp} XP</div></div>`).join('')
-      : '<p class="note">Пока пусто — пройди урок и стань первым!</p>'}</div>
-      <p class="note">Опыт дают за уроки. Без ошибок — бонус!</p></div>`;
+    const mode = S.topMode || 'tourn';
+    const seg = `<div class="seg">
+      <button class="${mode === 'tourn' ? 'on' : ''}" data-top-mode="tourn">🏆 Турнир недели</button>
+      <button class="${mode === 'all' ? 'on' : ''}" data-top-mode="all">⭐ За всё время</button></div>`;
+    if (mode === 'all') {
+      if (!S.top) { api.top().then(r => { S.top = r.top || []; if (S.tab === 'top') render(); }); return `<div class="screen"><h2 class="title">Рейтинг</h2>${seg}<p class="note">Загружаю…</p></div>`; }
+      return `<div class="screen"><h2 class="title">Рейтинг</h2>${seg}<div class="card">${S.top.length
+        ? S.top.map((u, i) => rankRow({ ...u, place: u.place || i + 1 })).join('')
+        : '<p class="note">Пока пусто — пройди урок и стань первым!</p>'}</div>
+        <p class="note">Опыт дают за уроки. Без ошибок — бонус!</p></div>`;
+    }
+    // Турнир недели
+    if (!S.tourn) { api.tournament().then(r => { S.tourn = r; if (S.tab === 'top') render(); }); return `<div class="screen"><h2 class="title">Рейтинг</h2>${seg}<p class="note">Загружаю…</p></div>`; }
+    const T = S.tourn;
+    const prize = `<div class="prize-card">
+      <div class="prize-title">🏆 Турнир недели</div>
+      <div class="prize-rows"><span>🥇 1 место</span><b>👑 Плюс на 7 дней</b></div>
+      <div class="prize-rows"><span>🥈 2 место</span><b>💎 200 алмазов</b></div>
+      <div class="prize-rows"><span>🥉 3 место</span><b>💎 100 алмазов</b></div>
+      <div class="prize-left">⏳ Осталось: <b>${leftStr(T.endsMs)}</b> · очки обнулятся в понедельник</div></div>`;
+    const last = T.lastWinner ? `<p class="note">Прошлую неделю выиграл ${esc(T.lastWinner.name)} — ${T.lastWinner.xp} XP 👑</p>` : '';
+    return `<div class="screen"><h2 class="title">Рейтинг</h2>${seg}${prize}
+      <div class="card">${(T.list && T.list.length)
+        ? T.list.map(rankRow).join('')
+        : '<p class="note">Пройди урок на этой неделе — и ты первый в турнире!</p>'}</div>
+      ${last}<p class="note">В турнире считается опыт, набранный с понедельника.</p></div>`;
   }
 
   // ---------- Магазин ----------
@@ -1025,7 +1055,7 @@
     if (r.failed) { S.view = 'nohearts'; S.L = null; return render(); }
     if (r.finished) {
       S.finish = { ...r.finished, title: L.lesson.title, correct: L.correct, total: L.lesson.questions.length, nextId: (LESSONS[lessonIndex(L.id) + 1] || {}).id };
-      S.view = 'finish'; S.L = null; S.top = null; haptic('ok');
+      S.view = 'finish'; S.L = null; S.top = null; S.tourn = null; haptic('ok');
       render(); celebrate();
       return;
     }
@@ -1157,8 +1187,8 @@
     const t = e.target.closest('button');
     if (!t || t.disabled) return;
     const d = t.dataset;
-    if (d.tab) { S.tab = d.tab; S.view = 'tabs'; haptic(); if (d.shopSide) S.shopSide = d.shopSide; if (d.topMode) S.topMode = d.topMode; if (d.tab === 'top') S.top = null; if (d.tab === 'friends') S.fr = null; render(); window.scrollTo(0, 0); }
-    else if (d.topMode) { S.topMode = d.topMode; S.top = null; haptic(); render(); }
+    if (d.tab) { S.tab = d.tab; S.view = 'tabs'; haptic(); if (d.shopSide) S.shopSide = d.shopSide; if (d.topMode) S.topMode = d.topMode; if (d.tab === 'top') { S.top = null; S.tourn = null; } if (d.tab === 'friends') S.fr = null; render(); window.scrollTo(0, 0); }
+    else if (d.topMode) { S.topMode = d.topMode; S.top = null; S.tourn = null; haptic(); render(); }
     else if (d.shopSide) { S.shopSide = d.shopSide; haptic(); render(); }
     else if (d.gemBuy) gemBuy(d.gemBuy);
     else if (d.quest) claimQuestChest(d.quest);

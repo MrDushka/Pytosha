@@ -13,6 +13,27 @@
   }
   const prevDay = iso => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); };
 
+  // ---------- Недельный турнир ----------
+  // Неделя = понедельник по Москве. weekId — дата этого понедельника, одинаковая у всех всю неделю.
+  function weekMonday(iso) {
+    const d = new Date(iso + 'T12:00:00Z');
+    const dow = (d.getUTCDay() + 6) % 7; // пн=0 … вс=6
+    d.setUTCDate(d.getUTCDate() - dow);
+    return d.toISOString().slice(0, 10);
+  }
+  const weekId = now => weekMonday(mskDay(now));
+  const prevWeekId = wid => { const d = new Date(wid + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() - 7); return d.toISOString().slice(0, 10); };
+  const weekEndsMs = now => { const d = new Date(weekId(now) + 'T00:00:00+03:00'); d.setUTCDate(d.getUTCDate() + 7); return d.getTime() - now.getTime(); }; // до следующего понедельника 00:00 МСК
+  const WEEK_PLUS_DAYS = 7;           // 1 место — Плюс на неделю
+  const WEEK_GEMS = [0, 200, 100];    // 2 место — 200 алмазов, 3 место — 100
+  // Очки за эту неделю (0, если неделя уже сменилась)
+  const weekXpNow = (p, now) => (p.weekId === weekId(now) ? (p.weekXp || 0) : 0);
+  function addWeekXp(p, now, xp) {
+    const wid = weekId(now);
+    if (p.weekId !== wid) { p.weekId = wid; p.weekXp = 0; }
+    p.weekXp = (p.weekXp || 0) + xp;
+  }
+
   function newPlayer() {
     return { xp: 0, hearts: MAX_HEARTS, heartsAt: null, streak: 0, bestStreak: 0, lastDay: null, done: {}, plusUntil: null, freezes: 0 };
   }
@@ -109,6 +130,7 @@
     const xp = Math.round(lessonXp({ firstTime, correct, mistakes }) * mult); // бустер из сундука умножает опыт
     const lvlBefore = level(p.xp);
     p.xp += xp;
+    addWeekXp(p, now, xp); // очки недельного турнира
     const gems = 1 + Math.floor(rnd() * 10); // 1…10 алмазов за урок
     p.gems = (p.gems || 0) + gems;
     questEvent(p, now, 'lessons', 1);
@@ -357,6 +379,7 @@
     const day = ((p.dailyRun - 1) % 7) + 1;
     const xp = DAILY_XP[day - 1];
     p.xp += xp;
+    addWeekXp(p, now, xp); // бонус за вход тоже идёт в недельный турнир
     questEvent(p, now, 'xp', xp);
     const freeze = day === 7;
     if (freeze) p.freezes = (p.freezes || 0) + 1;
@@ -468,6 +491,7 @@
     NEWBIE_DAYS, ensureStart, newbieDaysLeft, isNewbie, unlimitedHearts,
     QUESTS, CHESTS, questsFor, questEvent, questStatus, claimQuest,
     GEM_SHOP, buyWithGems, STREAK_STEP, streakReward, awardStreakGems,
+    weekId, prevWeekId, weekEndsMs, weekXpNow, addWeekXp, WEEK_PLUS_DAYS, WEEK_GEMS,
     REF_DAYS, REF_PLUS_DAYS, referralReady, grantPlusDays, makeCode, cleanCode,
     LANGS, cleanLang, langInfo, lessonLang,
     RARITIES, QUEST_CHESTS, UPGRADE_CHANCE, rollChest, BOOST_MIN, BOOST_CHANCE, boostNow, applyBoost, FSTREAK_MAX, FSTREAK_GOALS, fstreakAlive, fstreakMark, fstreakReward, fstreakNext,
