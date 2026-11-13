@@ -17,7 +17,8 @@
   }
 
   // tests — см. py-harness.py. timeoutMs — сколько ждать (первый запуск дольше: Python скачивается).
-  function run(code, tests, timeoutMs) {
+  // opts.sandbox — песочница: pip install и автоустановка библиотек по import
+  function run(code, tests, timeoutMs, opts) {
     if (!worker) spawn();
     const id = ++seq;
     const limit = timeoutMs || (warm ? 6000 : 60000);
@@ -28,7 +29,7 @@
         resolve({ error: warm ? 'timeout' : 'timeout' });
       }, limit);
       pending.set(id, { resolve, timer });
-      worker.postMessage({ id, code, tests });
+      worker.postMessage({ id, code, tests, sandbox: !!(opts && opts.sandbox) });
     });
   }
 

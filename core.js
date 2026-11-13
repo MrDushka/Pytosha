@@ -19,8 +19,8 @@
 
   const hasPlus = (p, now) => !!(p.plusUntil && new Date(p.plusUntil) > now);
 
-  // ---------- Новичок: первые 14 дней жизни не тратятся ----------
-  const NEWBIE_DAYS = 14;
+  // ---------- Новичок: первые 7 дней жизни не тратятся ----------
+  const NEWBIE_DAYS = 7;
   const dayNum = iso => Math.floor(Date.parse(iso + 'T00:00:00Z') / 86400000);
   // Запоминаем первый день ученика (у старых учеников — день, когда впервые зашли после обновления)
   function ensureStart(p, now) { if (!p.startDay) p.startDay = mskDay(now); return p; }
@@ -346,9 +346,9 @@
   const SHOP = {
     hearts: { title: '❤️ Все жизни сразу', description: 'Мгновенно восстанавливает все 5 жизней', stars: 10 },
     freeze: { title: '🧊 Заморозка серии', description: 'Пропустишь один день — серия не сгорит', stars: 15 },
-    plus_week: { title: '👑 Питоша Плюс на неделю', description: 'Безлимит жизней, песочница и темы на 7 дней', stars: 25, plusDays: 7 },
-    plus: { title: '👑 Питоша Плюс на месяц', description: 'Безлимит жизней, песочница и темы на 30 дней', stars: 75, plusDays: 30 },
-    plus_year: { title: '👑 Питоша Плюс на год', description: 'Безлимит жизней, песочница и темы на 365 дней', stars: 499, plusDays: 365 },
+    plus_week: { title: '👑 Питоша Плюс на неделю', description: 'Безлимит жизней и темы на 7 дней', stars: 25, plusDays: 7 },
+    plus: { title: '👑 Питоша Плюс на месяц', description: 'Безлимит жизней и темы на 30 дней', stars: 75, plusDays: 30 },
+    plus_year: { title: '👑 Питоша Плюс на год', description: 'Безлимит жизней и темы на 365 дней', stars: 499, plusDays: 365 },
     plus_promo: { title: '🎁 Плюс на месяц — акция', description: 'Для первых 100 учеников: месяц Плюса со скидкой', stars: 50, plusDays: 30 },
   };
   const PROMO_LIMIT = 100;

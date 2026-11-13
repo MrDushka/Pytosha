@@ -58,7 +58,7 @@ def run_tests(code, tests):
         results.append({
             "ok": ok,
             "err": err,
-            "printed": printed[:2000],
+            "printed": printed[:20000] if t.get("run") else printed[:2000],
             "got": got,
             "stdin": t.get("stdin", ""),
             "expr": t.get("expr"),

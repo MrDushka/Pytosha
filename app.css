@@ -405,3 +405,6 @@ h3.sub { font-size: 18px; font-weight: 900; margin: 18px 0 10px; }
 .two-btn { display: flex; gap: 8px; } .two-btn .big { flex: 1; }
 .chest-btn { display: flex; align-items: center; justify-content: center; gap: 8px; }
 .chest-btn .ic { width: 30px; height: 30px; }
+
+/* Песочница: сообщения об установке библиотек */
+.console-log { color: #7fd6ff; font-weight: 800; font-size: 13px; margin-bottom: 8px; line-height: 1.5; }

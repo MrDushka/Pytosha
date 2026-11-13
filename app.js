@@ -298,7 +298,7 @@
       html += `<button class="card banner resume" data-lesson="${s.id}"><span class="b-ico">${I('play')}</span>
         <span class="b-text"><b>Продолжить урок</b><small>«${esc(s.title)}» — вопрос ${p.session.i + 1} из ${s.questions.length}</small></span><span class="b-go">▶</span></button>`;
     }
-    // Режим новичка: первые 14 дней жизни не тратятся
+    // Режим новичка: первые 7 дней жизни не тратятся
     if (p.newbieDays && !p.plus) {
       html += `<div class="card banner newbie"><span class="b-ico">🐣</span><span class="b-text"><b>Режим новичка</b>
         <small>Ещё ${p.newbieDays} ${days(p.newbieDays)} жизни не тратятся — ошибайся смело!</small></span></div>`;
@@ -363,7 +363,7 @@
       <div class="ach-grid">${C.ACHIEVEMENTS.map(a => { const got = p.ach && p.ach[a.id];
         return `<div class="ach ${got ? 'got' : ''}" title="${esc(a.desc)}"><span>${got ? a.ico : '🔒'}</span><b>${esc(a.title)}</b><small>${esc(a.desc)}</small></div>`; }).join('')}</div>
       <div class="grid2" style="margin-top:12px">
-        <button class="tile tile-btn" data-act="sandbox"><b>🧪</b><small>Песочница${canPlus() ? '' : ' 👑'}</small></button>
+        <button class="tile tile-btn" data-act="sandbox"><b>🧪</b><small>Песочница</small></button>
         <button class="tile tile-btn" data-act="share"><b>📤</b><small>Поделиться успехами</small></button>
       </div>
     </div>`;
@@ -403,7 +403,7 @@
     }
     return `<div class="screen"><h2 class="title">Магазин</h2>${seg}
       <div class="card plus-card"><div class="plus-head">👑 <b>Питоша Плюс</b>${p.plus ? `<span class="plus-left">${p.plusDays > 3650 ? 'навсегда' : `ещё ${p.plusDays} ${days(p.plusDays)}`}</span>` : ''}</div>
-        <ul class="perks"><li>❤️ Безлимитные жизни — учись сколько хочешь</li><li>🧪 Песочница — пиши любой код в телефоне</li><li>🎨 Эксклюзивные темы оформления</li></ul>
+        <ul class="perks"><li>❤️ Безлимитные жизни — учись сколько хочешь</li><li>🎨 Эксклюзивные темы оформления</li></ul>
         ${promo && promo.available ? `<button class="promo" data-buy="plus_promo"><b>🎁 Акция для первых 100: месяц за ${C.SHOP.plus_promo.stars} ⭐</b><small>Осталось мест: ${promo.left}</small></button>` : ''}
         <div class="plans">${PLANS.map(pl => `<button class="plan ${pl.tag ? 'hot' : ''}" data-buy="${pl.id}">${pl.tag ? `<i>${pl.tag}</i>` : ''}<b>${pl.name}</b><span>${pl.price} ⭐</span><small>${pl.sub}</small></button>`).join('')}</div>
         ${p.plus ? '<p class="note">Новая покупка добавит дни к текущему Плюсу</p>' : ''}</div>
@@ -563,7 +563,7 @@
       <h3 class="sub">⚙️ Настройки</h3>
       <div class="card menu">
         <button class="menu-row" data-act="vibro"><span>📳 Вибрация</span><i class="switch ${vibro ? 'on' : ''}"></i></button>
-        <button class="menu-row" data-act="sandbox"><span>🧪 Песочница${canPlus() ? '' : ' 👑'}</span><i>›</i></button>
+        <button class="menu-row" data-act="sandbox"><span>🧪 Песочница</span><i>›</i></button>
         <button class="menu-row" data-act="invite"><span>📨 Пригласить друга</span><i>›</i></button>
         <button class="menu-row" data-act="share"><span>📤 Поделиться успехами</span><i>›</i></button>
         <button class="menu-row" data-act="edit-profile"><span>✏️ Имя и аватарка</span><i>›</i></button>
@@ -572,9 +572,8 @@
       ${api.demo ? '<p class="note">Демо-режим: прогресс хранится в этом браузере.</p><button class="big ghost" data-act="reset">Сбросить прогресс</button>' : ''}</div>`;
   }
 
-  // ---------- Песочница (Плюс): пиши любой код ----------
+  // ---------- Песочница (бесплатно): настоящий Python, любые программы, библиотеки через pip ----------
   function openSandbox() {
-    if (!canPlus()) { toast('🧪 Песочница — в Питоше Плюс'); S.tab = 'shop'; S.view = 'tabs'; render(); return; }
     S.sandbox = S.sandbox || { code: store.get('pitosha-sandbox') || 'name = input("Как тебя зовут? ")\nprint(f"Привет, {name}! 🐍")\n', stdin: 'Питоша', out: '', running: false };
     S.view = 'sandbox';
     window.PY.preload();
@@ -583,7 +582,7 @@
   function sandboxScreen() {
     const B = S.sandbox;
     return `<div class="screen" style="padding-top:14px"><h2 class="title">🧪 Песочница</h2>
-      <p class="note" style="text-align:left;margin-top:-8px">Пиши любой код на Python и запускай прямо в телефоне. Код сохраняется сам.</p>
+      <p class="note" style="text-align:left;margin-top:-8px">Настоящий Python прямо в телефоне — пиши что угодно. Нужна библиотека? Просто напиши <code>import</code> или строку <code>pip install имя</code> — Питоша скачает её сам. Код сохраняется сам.</p>
       <textarea class="editor" id="sb-editor" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off">${esc(B.code)}</textarea>
       <label class="stdin-label">⌨️ Ввод для input() (каждое значение с новой строки):</label>
       <textarea class="stdin" id="sb-stdin" spellcheck="false" rows="2">${esc(B.stdin)}</textarea>
@@ -604,7 +603,7 @@
     if (ed) B.code = ed.value;
     if (!B.code.trim()) return toast('Сначала напиши код ✍️');
     const r = await api.snippetSave(B.code);
-    if (r.error) return toast({ need_plus: '💾 Сохранение — в Питоша Плюс', limit: 'Слишком много сохранений за сутки', too_long: 'Слишком длинная программа' }[r.error] || 'Не получилось сохранить');
+    if (r.error) return toast({ limit: 'Слишком много сохранений за сутки', too_long: 'Слишком длинная программа' }[r.error] || 'Не получилось сохранить');
     haptic('ok'); S.snips = null;
     toast('💾 Сохранено! Отправь ссылку другу');
     render();
@@ -627,7 +626,7 @@
       <label class="stdin-label">⌨️ Ввод для input() (каждое значение с новой строки):</label>
       <textarea class="stdin" id="snip-stdin" spellcheck="false" rows="2">${esc(N.stdin)}</textarea>
       <div class="code-tools"><button class="tool" data-act="snip-run">${N.running ? '⏳ Запуск…' : '▶️ Запустить'}</button>
-        <button class="tool" data-act="snip-to-sandbox">🧪 В песочницу${canPlus() ? '' : ' 👑'}</button>
+        <button class="tool" data-act="snip-to-sandbox">🧪 В песочницу</button>
         <button class="tool" data-snip-share="https://t.me/pythonshkabot?start=code_${esc(N.id)}">📤</button></div>
       ${N.out ? `<div class="console">${N.out}</div>` : ''}
       <button class="big ghost" data-act="home">На главную</button></div>`;
@@ -637,7 +636,7 @@
     if (N.running) return;
     const si = document.getElementById('snip-stdin'); if (si) N.stdin = si.value;
     N.running = true; N.out = !window.PY.isWarm() ? '⏳ Загружаю Python (только в первый раз, ~10 секунд)…' : ''; render();
-    const r = await window.PY.run(N.code, [{ run: true, stdin: N.stdin }]);
+    const r = await window.PY.run(N.code, [{ run: true, stdin: N.stdin }], 120000, { sandbox: true });
     N.running = false;
     if (r.error) N.out = pyFail(r);
     else { const t = r.results[0]; N.out = `<div class="console-title">Вывод программы:</div><pre>${esc(t.printed || '(ничего не напечатано)')}</pre>` + (t.err ? `<div class="console-err">❌ ${esc(t.err)}</div>${tipHtml(explainError(t.err))}` : ''); }
@@ -650,12 +649,14 @@
     if (ed) B.code = ed.value;
     if (si) B.stdin = si.value;
     B.running = true; B.out = !window.PY.isWarm() ? '⏳ Загружаю Python (только в первый раз, ~10 секунд)…' : ''; render();
-    const r = await window.PY.run(B.code, [{ run: true, stdin: B.stdin }]);
+    const code = B.code, libs = /^\s*[!%]?\s*pip3?\s+install|^\s*(import|from)\s/m.test(code);
+    if (libs) B.out = (B.out ? B.out + '<br>' : '') + '📦 Проверяю и ставлю библиотеки — первый раз это может занять до минуты…', render();
+    const r = await window.PY.run(code, [{ run: true, stdin: B.stdin }], libs ? 120000 : 20000, { sandbox: true });
     B.running = false;
     if (r.error) B.out = pyFail(r);
     else {
       const t = r.results[0];
-      B.out = `<div class="console-title">Вывод программы:</div><pre>${esc(t.printed || '(ничего не напечатано)')}</pre>` +
+      B.out = (r.log && r.log.length ? `<div class="console-log">${r.log.map(esc).join('<br>')}</div>` : '') + `<div class="console-title">Вывод программы:</div><pre>${esc(t.printed || '(ничего не напечатано)')}</pre>` +
         (t.err ? `<div class="console-err">❌ ${esc(t.err)}</div>${tipHtml(explainError(t.err))}` : '');
     }
     render();
@@ -1072,7 +1073,7 @@
     else if (d.act === 'friend-search') searchFriends();
     else if (d.act === 'invite') shareLink(S.player.refLink, 'Учи Python вместе со мной в Питоше 🐍 По моей ссылке мы сразу станем друзьями и сможем устроить дружеский забег!');
     else if (d.act === 'sb-save') saveSnippet();
-    else if (d.act === 'snip-to-sandbox') { if (!canPlus()) { toast('🧪 Песочница — в Питоше Плюс'); S.tab = 'shop'; S.view = 'tabs'; render(); } else { S.sandbox = { code: S.snip.code, stdin: '', out: '', running: false }; store.set('pitosha-sandbox', S.snip.code); S.view = 'sandbox'; render(); } }
+    else if (d.act === 'snip-to-sandbox') { S.sandbox = { code: S.snip.code, stdin: '', out: '', running: false }; store.set('pitosha-sandbox', S.snip.code); S.view = 'sandbox'; render(); }
     else if (d.act === 'snip-run') runSnippet();
     else if (d.act === 'vibro') { store.set('pitosha-vibro', store.get('pitosha-vibro') === 'off' ? 'on' : 'off'); haptic(); render(); }
     else if (d.place !== undefined) placementAnswer(d.place);
