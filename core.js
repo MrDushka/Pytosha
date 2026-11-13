@@ -105,7 +105,8 @@
   // Завершить урок: ответы → опыт, алмазы, серия, отметка «пройден», задания, ачивки
   function finishLesson(p, lesson, { correct, mistakes }, now, rnd = Math.random) {
     const firstTime = !p.done[lesson.id] || !!p.done[lesson.id].skipped;
-    const xp = lessonXp({ firstTime, correct, mistakes });
+    const mult = boostNow(p, now);
+    const xp = Math.round(lessonXp({ firstTime, correct, mistakes }) * mult); // бустер из сундука умножает опыт
     const lvlBefore = level(p.xp);
     p.xp += xp;
     const gems = 1 + Math.floor(rnd() * 10); // 1…10 алмазов за урок
@@ -125,7 +126,7 @@
     const streakUp = bumpStreak(p, now);
     const streakGems = awardStreakGems(p, now); // рубеж серии: 10, 20, 30… дней — алмазы
     const ach = checkAchievements(p, now);
-    return { xp, gems, streakGems, firstTime, perfect: mistakes === 0, streak: p.streak, streakUp, levelUp: level(p.xp) > lvlBefore, level: level(p.xp), ach };
+    return { xp, boost: mult > 1 ? mult : null, gems, streakGems, firstTime, perfect: mistakes === 0, streak: p.streak, streakUp, levelUp: level(p.xp) > lvlBefore, level: level(p.xp), ach };
   }
   // Учёт ответа: решённые задачи с кодом и верные ответы нужны для ачивок и заданий
   function recordAnswer(p, q, correct, now) {
@@ -158,12 +159,31 @@
   };
   // Любой сундук, кроме легендарного, с шансом 25% улучшается на одну ступень
   const UPGRADE_CHANCE = 0.25;
+  // Бустер опыта из сундука: чем реже сундук, тем чаще выпадает. Действует 15 минут.
+  const BOOST_MIN = 15;
+  const BOOST_CHANCE = { common: 0.2, rare: 0.3, epic: 0.45, legendary: 0.6 };
+  function rollBoost(rarity, rnd) {
+    if (!(rnd() < BOOST_CHANCE[rarity])) return null;
+    const r = rnd();
+    return r < 0.55 ? 1.5 : r < 0.88 ? 2 : 3; // x1.5 чаще всего, x3 — редкость
+  }
   function rollChest(base, rnd = Math.random) {
     let k = Math.max(0, RARITIES.indexOf(base));
     if (k < RARITIES.length - 1 && rnd() < UPGRADE_CHANCE) k += 1;
     const rarity = RARITIES[Math.min(k, RARITIES.length - 1)];
     const [lo, hi] = CHESTS[rarity].gems;
-    return { chest: rarity, gems: lo + Math.floor(rnd() * (hi - lo + 1)) };
+    const got = { chest: rarity, gems: lo + Math.floor(rnd() * (hi - lo + 1)) };
+    const boost = rollBoost(rarity, rnd);
+    if (boost) got.boost = boost;
+    return got;
+  }
+  const boostNow = (p, now) => (p.xpBoost && new Date(p.xpBoost.until) > now ? p.xpBoost.mult : 1);
+  // Новый бустер: берём больший множитель, время — 15 минут с этого момента (или сколько осталось, если больше)
+  function applyBoost(p, mult, now) {
+    if (!mult) return;
+    const cur = boostNow(p, now) > 1 ? p.xpBoost : null;
+    const until = new Date(now.getTime() + BOOST_MIN * 60000);
+    p.xpBoost = { mult: Math.max(mult, cur ? cur.mult : 1), until: (cur && new Date(cur.until) > until ? new Date(cur.until) : until).toISOString() };
   }
   function seeded(text) {
     let seed = 0;
@@ -210,6 +230,7 @@
     const got = rollChest(chest, rnd);
     p.quests.claimed[id] = true;
     p.gems = (p.gems || 0) + got.gems;
+    applyBoost(p, got.boost, now);
     return got;
   }
 
@@ -431,7 +452,7 @@
     QUESTS, CHESTS, questsFor, questEvent, questStatus, claimQuest,
     GEM_SHOP, buyWithGems, STREAK_STEP, streakReward, awardStreakGems,
     REF_DAYS, REF_PLUS_DAYS, referralReady, grantPlusDays, makeCode, cleanCode,
-    RARITIES, QUEST_CHESTS, UPGRADE_CHANCE, rollChest, FSTREAK_MAX, FSTREAK_GOALS, fstreakAlive, fstreakMark, fstreakReward, fstreakNext,
+    RARITIES, QUEST_CHESTS, UPGRADE_CHANCE, rollChest, BOOST_MIN, BOOST_CHANCE, boostNow, applyBoost, FSTREAK_MAX, FSTREAK_GOALS, fstreakAlive, fstreakMark, fstreakReward, fstreakNext,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.CORE = api;
 })(typeof self !== 'undefined' ? self : this);

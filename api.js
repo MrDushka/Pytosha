@@ -31,6 +31,7 @@
       gemBuy: item => post('/gem_buy', { item }),
       questClaim: id => post('/quest_claim', { id }),
       friends: () => post('/friends'),
+      admin: () => post('/admin'),
       friendSearch: q => post('/friend_search', { q }),
       follow: id => post('/follow', { id }),
       unfollow: id => post('/unfollow', { id }),
@@ -66,6 +67,7 @@
         gems: data.player.gems || 0, newbieDays: C.newbieDaysLeft(data.player, now),
         quests: C.questStatus(data.player, now), refLink: 'https://t.me/pythonshkabot?start=ref_demo',
         streakReward: C.streakReward(data.player, now),
+        boost: C.boostNow(data.player, now) > 1 ? { mult: C.boostNow(data.player, now), until: data.player.xpBoost.until } : null,
       };
     };
     // Демо-друзья и забеги — чтобы посмотреть экран без сервера. Я в забеге — сторона «a», друг — «b».
@@ -146,6 +148,11 @@
         save();
         return ok({ chest: got, player: view() });
       },
+      admin() {
+        const t = Date.now(), iso = m => new Date(t - m * 60000).toISOString();
+        const players = data.people.map((p, i) => ({ ...p, source: ['tiktok', 'direct', 'friend', 'youtube'][i % 4], created: iso(60 * 24 * (i + 1)), seen: iso([2, 30, 300, 3000][i % 4]) }));
+        return ok({ total: players.length, online: 1, activeToday: 3, newToday: 1, players });
+      },
       // ---------- Друзья в демо: подписки, взаимная подписка = друзья, дружеские забеги ----------
       friends: () => ok(demoFriends()),
       friendSearch(q) {
@@ -195,6 +202,7 @@
         s.a_reward = goal.n;
         const got = C.rollChest(goal.chest);
         data.player.gems = (data.player.gems || 0) + got.gems;
+        C.applyBoost(data.player, got.boost, new Date());
         save();
         return ok({ chest: { ...got, n: goal.n }, player: view(), ...demoFriends() });
       },

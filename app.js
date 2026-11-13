@@ -272,7 +272,7 @@
     const hearts = p.plus || p.newbieDays ? '∞' : p.hearts;
     return `<div class="topbar">
       <div class="stat fire ${p.streakNow ? '' : 'off'}">🔥 ${p.streakNow}</div>
-      <div class="stat xp">⭐ ${p.xp}</div>
+      <div class="stat xp">⭐ ${p.xp}${p.boost ? ` <span class="boost-badge" title="Бустер опыта">⚡x${p.boost.mult}</span>` : ''}</div>
       <button class="stat gem" data-tab="shop" data-shop-side="gems">💎 ${p.gems || 0}</button>
       <div class="stat heart">❤️ ${hearts}${p.plus ? ' <span class="plus-badge">PLUS</span>' : p.newbieDays ? ' <span class="plus-badge newbie">🐣</span>' : ''}</div>
     </div>`;
@@ -349,7 +349,7 @@
         <div class="tile"><b>⭐ ${p.xp}</b><small>всего опыта</small></div>
         <div class="tile"><b>📚 ${doneCount}/${LESSONS.length}</b><small>уроков пройдено</small></div>
       </div>
-      ${p.admin ? '<div class="card" style="margin-top:12px;border-color:var(--yellow)">🛠 <b>Режим создателя</b><br><span style="color:var(--muted);font-weight:700">Все уроки открыты, жизни бесконечные. В рейтинге тебя не видно — чтобы не мешать ученикам. Статистика — команда /stats в боте.</span></div>' : ''}
+      ${p.admin ? '<div class="card" style="margin-top:12px;border-color:var(--yellow)">🛠 <b>Режим создателя</b><br><span style="color:var(--muted);font-weight:700">Все уроки открыты, жизни бесконечные. В рейтинге тебя не видно — чтобы не мешать ученикам. Статистика — команда /stats в боте.</span><button class="big" data-act="admin" style="margin-top:10px">📊 Админка: кто онлайн</button></div>' : ''}
       ${p.plus && p.plusDays > 3650 ? '<div class="card plus-status"><div>👑 <b>Питоша Плюс</b><br><span>Навсегда</span></div></div>'
         : p.plus ? `<div class="card plus-status ${p.plusDays <= 3 ? 'ending' : ''}"><div>👑 <b>Питоша Плюс</b><br><span>${p.plusDays <= 3 ? '⏳ ' : ''}Закончится через ${p.plusDays} ${days(p.plusDays)} · до ${new Date(p.plusUntil).toLocaleDateString('ru-RU')}</span></div>
           <button class="price" data-act="renew">Продлить</button></div>`
@@ -443,7 +443,7 @@
     box.className = 'chest-pop ' + got.chest;
     box.innerHTML = svgify(`<div class="cp-card"><div class="cp-title">${esc(title || 'Сундук')}</div>
       <div class="cp-chest shake">${chestIco(got.chest)}</div>
-      <div class="cp-reveal"><div class="cp-rarity">${CHEST_NAME[got.chest] || ''}</div><div class="cp-gems">+${got.gems} 💎</div></div>
+      <div class="cp-reveal"><div class="cp-rarity">${CHEST_NAME[got.chest] || ''}</div><div class="cp-gems">+${got.gems} 💎</div>${got.boost ? `<div class="cp-boost">⚡ Бустер опыта x${got.boost} на ${C.BOOST_MIN} минут!</div>` : ''}</div>
       <button class="big">Забрать</button></div>`);
     document.body.appendChild(box);
     setTimeout(() => { box.classList.add('opened'); if (got.chest === 'epic' || got.chest === 'legendary') celebrate(); }, 900);
@@ -572,6 +572,30 @@
       ${api.demo ? '<p class="note">Демо-режим: прогресс хранится в этом браузере.</p><button class="big ghost" data-act="reset">Сбросить прогресс</button>' : ''}</div>`;
   }
 
+  // ---------- Админка (только для создателя) ----------
+  function openAdmin() { S.view = 'admin'; S.adm = null; render(); api.admin().then(r => { S.adm = r; if (S.view === 'admin') render(); }); }
+  function agoText(iso) {
+    const m = Math.floor((Date.now() - new Date(iso)) / 60000);
+    if (m < 5) return '🟢 онлайн';
+    if (m < 60) return `${m} мин назад`;
+    if (m < 1440) return `${Math.floor(m / 60)} ч назад`;
+    const d = Math.floor(m / 1440); return `${d} ${days(d)} назад`;
+  }
+  function adminScreen() {
+    const A = S.adm;
+    if (!A) return '<div class="screen" style="padding-top:14px"><h2 class="title">📊 Админка</h2><p class="note">Загружаю…</p></div>';
+    if (A.error) return '<div class="screen" style="padding-top:14px"><h2 class="title">📊 Админка</h2><p class="note">Нет доступа</p><button class="big ghost" data-act="home">Назад</button></div>';
+    const user = p => p.username ? `<a class="adm-user" href="https://t.me/${esc(p.username)}" target="_blank">@${esc(p.username)}</a>` : '<span class="adm-nouser">без юзернейма</span>';
+    return `<div class="screen" style="padding-top:14px"><h2 class="title">📊 Админка</h2>
+      <div class="grid2"><div class="tile"><b>🟢 ${A.online}</b><small>онлайн сейчас (5 мин)</small></div><div class="tile"><b>🔥 ${A.activeToday}</b><small>заходили сегодня</small></div>
+        <div class="tile"><b>🆕 ${A.newToday}</b><small>новых сегодня</small></div><div class="tile"><b>👥 ${A.total}</b><small>всего учеников</small></div></div>
+      <button class="big ghost" data-act="admin" style="margin:12px 0">🔄 Обновить</button>
+      <div class="card">${A.players.length ? A.players.map(p => `<div class="row adm-row"><div class="row-av">${avatarHtml(p.avatar)}</div>
+        <div class="who">${esc(p.name)} ${user(p)}<small class="sub-line">⭐ ${p.xp} XP${p.streak ? ' · 🔥 ' + p.streak : ''} · ${esc(p.source)} · ${agoText(p.seen)}</small></div></div>`).join('') : '<p class="note">Пока учеников нет</p>'}</div>
+      <p class="note">Ты в списке не показан. «Онлайн» — кто открывал Питошу за последние 5 минут.</p>
+      <button class="big ghost" data-act="home">Назад</button></div>`;
+  }
+
   // ---------- Песочница (бесплатно): настоящий Python, любые программы, библиотеки через pip ----------
   function openSandbox() {
     S.sandbox = S.sandbox || { code: store.get('pitosha-sandbox') || 'name = input("Как тебя зовут? ")\nprint(f"Привет, {name}! 🐍")\n', stdin: 'Питоша', out: '', running: false };
@@ -656,8 +680,12 @@
     if (r.error) B.out = pyFail(r);
     else {
       const t = r.results[0];
-      B.out = (r.log && r.log.length ? `<div class="console-log">${r.log.map(esc).join('<br>')}</div>` : '') + `<div class="console-title">Вывод программы:</div><pre>${esc(t.printed || '(ничего не напечатано)')}</pre>` +
-        (t.err ? `<div class="console-err">❌ ${esc(t.err)}</div>${tipHtml(explainError(t.err))}` : '');
+      // tkinter, pygame и т.п.: это не ошибка ученика — в телефоне просто нет окон. Объясняем по-доброму.
+      const desk = r.desktop || [], deskErr = desk.length && t.err && /^ModuleNotFoundError/.test(t.err);
+      B.out = (r.log && r.log.length ? `<div class="console-log">${r.log.map(esc).join('<br>')}</div>` : '') +
+        (desk.length ? `<div class="console-info">💻 ${esc(desk.join(', '))} — это для компьютера: в телефоне нет окон, клавиатуры и звука Windows. Такой код заработает, если скачать Python на компьютер (python.org). А здесь пиши программы с <code>print()</code> и <code>input()</code> — им всё доступно!</div>` : '') +
+        (deskErr ? '' : `<div class="console-title">Вывод программы:</div><pre>${esc(t.printed || '(ничего не напечатано)')}</pre>` +
+        (t.err ? `<div class="console-err">❌ ${esc(t.err)}</div>${tipHtml(explainError(t.err))}` : ''));
     }
     render();
   }
@@ -947,7 +975,7 @@
     return `<div class="center"><div class="bounce">${window.pitosha({ size: 170 })}</div>
       <h1>${f.perfect ? 'Идеально! 🎉' : 'Урок пройден! 🎉'}</h1><p>«${esc(f.title)}»</p>
       <div class="rewards">
-        <div class="reward y"><small>Опыт</small><b>+${f.xp}</b></div>
+        <div class="reward y"><small>Опыт${f.boost ? ` ⚡x${f.boost}` : ''}</small><b>+${f.xp}</b></div>
         <div class="reward b"><small>Алмазы</small><b>💎 +${f.gems || 0}</b></div>
         <div class="reward o"><small>Серия</small><b>🔥 ${f.streak}</b></div>
         <div class="reward g"><small>Точность</small><b>${acc}%</b></div>
@@ -1007,6 +1035,7 @@
     else if (S.view === 'onboard') html = onboardScreen();
     else if (S.view === 'placement') html = placementScreen();
     else if (S.view === 'sandbox') html = sandboxScreen();
+    else if (S.view === 'admin') html = adminScreen();
     else if (S.view === 'snippet') html = snippetScreen();
     else html = topbar() + ({ learn: learnScreen, quests: questsScreen, top: topScreen, friends: friendsScreen, shop: shopScreen, me: meScreen, more: moreScreen }[S.tab] || learnScreen)() + tabs();
     $app.innerHTML = svgify(html);
@@ -1083,6 +1112,7 @@
     else if (d.act === 'onb-test') startPlacement();
     else if (d.act === 'share') shareResult();
     else if (d.act === 'sandbox') openSandbox();
+    else if (d.act === 'admin') openAdmin();
     else if (d.act === 'sb-run') runSandbox();
     else if (d.act === 'renew') { S.tab = 'shop'; S.view = 'tabs'; render(); window.scrollTo(0, 0); }
     else if (d.lesson) { if (t.getAttribute('aria-disabled') === 'true') toast('🔒 Сначала пройди предыдущий урок'); else openLesson(d.lesson); }

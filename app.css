@@ -408,3 +408,12 @@ h3.sub { font-size: 18px; font-weight: 900; margin: 18px 0 10px; }
 
 /* Песочница: сообщения об установке библиотек */
 .console-log { color: #7fd6ff; font-weight: 800; font-size: 13px; margin-bottom: 8px; line-height: 1.5; }
+
+/* Песочница: подсказка про библиотеки для компьютера */
+.console-info { background: rgba(255, 212, 59, .12); border: 2px solid rgba(255, 212, 59, .5); border-radius: 12px; padding: 10px 12px; font-weight: 700; line-height: 1.45; margin-bottom: 8px; }
+/* Бустер опыта */
+.boost-badge { background: linear-gradient(90deg, #ff9f43, #ffd43b); color: #3b2300; border-radius: 8px; padding: 1px 6px; font-size: 12px; font-weight: 900; margin-left: 4px; }
+.cp-boost { margin-top: 6px; font-weight: 900; color: #ffb020; font-size: 18px; }
+/* Админка */
+.adm-user { color: #4fc3ff; font-weight: 800; font-size: 13px; text-decoration: none; }
+.adm-nouser { color: var(--muted); font-size: 12px; font-weight: 700; }

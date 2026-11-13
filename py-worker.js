@@ -39,6 +39,15 @@ def __missing(code):
     return sorted(x for x in names if importlib.util.find_spec(x) is None)
 `;
 
+// Библиотеки, которым нужен компьютер: окна, звук, клавиатура. В браузере их не бывает — не пытаемся ставить.
+const DESKTOP_ONLY = {
+  tkinter: 'окна и кнопки (tkinter)', _tkinter: 'окна и кнопки (tkinter)', turtle: 'черепашка-рисовалка (turtle)',
+  pygame: 'игры с окном (pygame)', pyglet: 'игры с окном (pyglet)', arcade: 'игры с окном (arcade)', kivy: 'окна (kivy)',
+  PyQt5: 'окна (PyQt)', PyQt6: 'окна (PyQt)', PySide6: 'окна (PySide)', wx: 'окна (wxPython)',
+  winsound: 'звук Windows (winsound)', msvcrt: 'клавиатура Windows (msvcrt)', keyboard: 'клавиатура (keyboard)', mouse: 'мышь (mouse)',
+  pyautogui: 'управление мышью (pyautogui)', curses: 'консольные окна (curses)', aiogram: 'Telegram-боты (aiogram)', telebot: 'Telegram-боты (telebot)',
+};
+
 async function installFor(py, code, pips) {
   const log = [];
   // 1) библиотеки, которые уже собраны для Pyodide (numpy, pandas, matplotlib…)
@@ -46,14 +55,16 @@ async function installFor(py, code, pips) {
   py.runPython(FIND_MISSING);
   py.globals.set('__src', code);
   const missing = py.runPython('__missing(__src)').toJs();
-  const want = [...new Set([...pips, ...missing])];
+  const desktop = [...new Set([...pips, ...missing])].filter(n => DESKTOP_ONLY[n]);
+  self.__desktop = desktop.map(n => DESKTOP_ONLY[n]);
+  const want = [...new Set([...pips, ...missing])].filter(n => !DESKTOP_ONLY[n]);
   if (!want.length) return log;
   // 2) остальное — с PyPI через micropip (подходят библиотеки на чистом Python)
   await py.loadPackage('micropip');
   const micropip = py.pyimport('micropip');
   for (const name of want) {
     try { await micropip.install(name); log.push(`📦 Установлено: ${name}`); }
-    catch (e) { log.push(`⚠️ Не удалось установить ${name}: в браузере работают только библиотеки на чистом Python и собранные для Pyodide`); }
+    catch (e) { log.push(`⚠️ Библиотеку ${name} не получилось скачать: в телефоне работают библиотеки на чистом Python и популярные научные (numpy, pandas, matplotlib…)`); }
   }
   return log;
 }
@@ -64,6 +75,7 @@ self.onmessage = async e => {
     if (!ready) ready = boot();
     const py = await ready;
     let run = code, log = [];
+    self.__desktop = [];
     if (sandbox) {
       const p = extractPip(code);
       run = p.clean;
@@ -72,7 +84,7 @@ self.onmessage = async e => {
     py.globals.set('__code', run);
     py.globals.set('__tests', JSON.stringify(tests));
     const res = py.runPython('json.dumps(run_tests(__code, json.loads(__tests)), ensure_ascii=False)');
-    self.postMessage({ id, results: JSON.parse(res), log });
+    self.postMessage({ id, results: JSON.parse(res), log, desktop: self.__desktop || [] });
   } catch (err) {
     self.postMessage({ id, error: String(err && err.message || err) });
   }
