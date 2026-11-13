@@ -1,7 +1,28 @@
 // Мини-приложение Питоши: дорожка уроков, урок, финиш, профиль, рейтинг, магазин.
 (function () {
-  const { UNITS, LESSONS, lessonById, lessonIndex } = window.COURSE;
   const C = window.CORE;
+  // Курс выбранного языка: Python всегда в course.js, остальные подгружаются из courses/<язык>.js
+  let UNITS, LESSONS, lessonById, lessonIndex, LANG = 'python';
+  function useLang(lang) {
+    const c = lang === 'python' ? window.COURSE : (window.COURSES || {})[lang];
+    LANG = c ? lang : 'python';
+    ({ UNITS, LESSONS, lessonById, lessonIndex } = c || window.COURSE);
+  }
+  function loadLang(lang) {
+    lang = C.cleanLang(lang);
+    if (lang === 'python' || (window.COURSES || {})[lang]) { useLang(lang); return Promise.resolve(); }
+    return new Promise(ok => {
+      const s = document.createElement('script');
+      s.src = `courses/${lang}.js?v=${Date.now() >> 22}`;
+      s.onload = () => { useLang(lang); ok(); };
+      s.onerror = () => { useLang('python'); ok(); };
+      document.head.appendChild(s);
+    });
+  }
+  useLang('python');
+  const langName = () => C.langInfo(LANG).name;
+  // Сообщение, пока качается движок языка (Python и Lua скачиваются при первом запуске)
+  const loadingMsg = () => (window.RUN.isWarm(LANG) ? '' : `⏳ Загружаю ${LANG === 'lua' ? 'Lua' : 'Python'} (только в первый раз, ~10 секунд)…`);
   const api = window.API;
   const { I, svgify, ent } = window.ICONS; // SVG-иконки вместо эмодзи
   const tg = window.Telegram && window.Telegram.WebApp;
@@ -48,8 +69,10 @@
   const days = n => (n % 10 === 1 && n % 100 !== 11 ? 'день' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'дня' : 'дней');
 
   // Подсветка Python-кода
-  const KW = new Set('if elif else for while def return import from in and or not True False None class pass break continue'.split(' '));
-  const FN = new Set('print len input int str float range upper lower list dict sum max min abs round type'.split(' '));
+  const KW = new Set(('if elif else for while def return import from in and or not True False None class pass break continue' +
+    ' let const var function true false null undefined new this of switch case do then end local nil elseif repeat until' +
+    ' int double float bool char void string public private static using namespace include std struct SELECT FROM WHERE ORDER BY LIMIT AND OR INSERT INTO VALUES UPDATE SET DELETE CREATE TABLE JOIN ON GROUP').split(' '));
+  const FN = new Set('print len input int str float range upper lower list dict sum max min abs round type console log prompt Number String tonumber tostring ipairs pairs Console WriteLine cout cin endl'.split(' '));
   function highlight(code) {
     const re = /(___)|([fF]?"[^"\n]*"?|[fF]?'[^'\n]*'?)|(\d+\.?\d*)|([A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё]*)|([+\-*/%=<>!]+|[()[\]{}.,:])|(\s+)|(.)/g;
     let out = '', m;
@@ -71,6 +94,7 @@
     if (r.error) { $app.innerHTML = `<div class="center">${window.pitosha({ mood: 'sad', size: 140 })}<h1>Не получилось загрузиться</h1><p>Открой Питошу через бота @pythonshkabot</p></div>`; return; }
     S.player = r.player;
     S.promo = r.promo || null;
+    await loadLang(S.player.lang);
     applyTheme();
     // Первый вход — знакомимся: аватарка и имя для рейтинга
     if (!S.player.profile || !S.player.profile.name) openRegister(true);
@@ -263,7 +287,7 @@
     haptic('ok');
     if (R.first) toast(`Привет, ${c.name}! Погнали 🐍`);
     // Новичку — вопрос «знаешь ли основы», если он ещё ничего не прошёл
-    S.view = 'tabs'; // после знакомства — сразу к урокам, без вступительного теста
+    S.view = R.first ? 'langpick' : 'tabs'; // после знакомства — выбор языка программирования
     render();
   }
 
@@ -291,7 +315,7 @@
   function learnScreen() {
     const p = S.player;
     const current = LESSONS.findIndex((l, i) => !p.done[l.id] && C.isUnlocked(p, LESSONS, i));
-    let html = '<div class="screen">';
+    let html = `<div class="screen"><button class="lang-chip" data-act="langpick">${C.langInfo(LANG).ico} ${esc(langName())} <i>сменить ›</i></button>`;
     // Недоконченный урок — продолжить с того же вопроса
     const s = p.session && lessonById(p.session.lesson);
     if (s && p.session.i > 0 && p.session.i < s.questions.length) {
@@ -330,7 +354,7 @@
       });
       html += '</div>';
     }
-    html += '<div class="soon">🏆 В конце — итоговый экзамен. Пройдёшь все уроки — будешь знать основы Python!</div></div>';
+    html += `<div class="soon">🏆 В конце — итоговый экзамен. Пройдёшь все уроки — будешь знать основы ${esc(langName())}!</div></div>`;
     return html;
   }
 
@@ -343,6 +367,7 @@
       <div class="card"><div class="profile-head"><div class="me-avatar">${avatarHtml((p.profile && p.profile.avatar) || '🐍')}</div><div style="flex:1"><b>${esc(p.name || 'Ученик')}</b> <button class="edit-btn" data-act="edit-profile">✏️</button>
         <div style="color:var(--muted);font-weight:800">Уровень ${lv} · ${inLv}/${C.XP_PER_LEVEL} XP</div>
         <div class="lvl-bar"><i style="width:${(inLv / C.XP_PER_LEVEL) * 100}%"></i></div></div></div></div>
+      <button class="big ghost lang-btn" data-act="langpick">🌐 Язык: ${C.langInfo(LANG).ico} ${esc(langName())} — сменить</button>
       ${p.admin ? '<button class="big admin-btn" data-act="admin">📊 Админка — кто онлайн и все ученики</button>' : ''}
       <div class="grid2">
         <div class="tile"><b>🔥 ${p.streakNow}</b><small>серия, ${days(p.streakNow)}</small></div>
@@ -597,88 +622,126 @@
       <button class="big ghost" data-act="home">Назад</button></div>`;
   }
 
-  // ---------- Песочница (бесплатно): настоящий Python, любые программы, библиотеки через pip ----------
+  // ---------- Выбор языка программирования ----------
+  function langPickScreen() {
+    return `<div class="screen" style="padding-top:14px"><h2 class="title">Какой язык будешь учить?</h2>
+      <p class="note" style="text-align:left;margin-top:-8px">Опыт, огонёк, алмазы и Плюс — общие для всех языков. Сменить язык можно в любой момент в профиле, прогресс сохранится.</p>
+      <div class="lang-grid">${C.LANGS.map(l => `<button class="card lang-card ${S.player.lang === l.id ? 'sel' : ''}" data-lang="${l.id}">
+        <span class="lang-ico">${l.ico}</span><b>${esc(l.name)}</b><small>${esc(l.about)}</small>${l.sandbox ? '<i class="lang-tag">🧪 есть песочница</i>' : ''}</button>`).join('')}</div>
+      ${S.player.lang ? '<button class="big ghost" data-act="home" style="margin-top:14px">Назад</button>' : ''}</div>`;
+  }
+  async function chooseLang(lang) {
+    haptic();
+    const r = await api.setLang(lang);
+    if (r.player) S.player = r.player;
+    await loadLang(lang);
+    S.view = 'tabs'; S.tab = 'learn'; S.sandbox = null;
+    toast(`${C.langInfo(LANG).ico} Учим ${C.langInfo(LANG).name}!`);
+    render(); window.scrollTo(0, 0);
+  }
+
+  // ---------- Песочница (бесплатно): Python, JavaScript, HTML/CSS и Lua ----------
+  const SB_LANGS = ['python', 'js', 'html', 'lua'];
+  const SB_START = {
+    python: 'name = input("Как тебя зовут? ")\nprint(f"Привет, {name}! 🐍")\n',
+    js: 'let name = prompt("Как тебя зовут?");\nconsole.log(`Привет, ${name}! ⚡`);\n',
+    html: '<style>\n  body { font-family: sans-serif; background: #0d1f3c; color: white; text-align: center; }\n  h1 { color: #ffd43b; }\n</style>\n<h1>Мой сайт</h1>\n<p>Я учу HTML и CSS в Питоше!</p>\n',
+    lua: 'local name = io.read()\nprint("Привет, " .. name .. "! 🎮")\nfor i = 1, 3 do\n  print("Уровень " .. i)\nend\n',
+  };
+  const SB_NOTE = {
+    python: 'Настоящий Python прямо в телефоне. Нужна библиотека? Напиши <code>import</code> или строку <code>pip install имя</code> — Питоша скачает её сам.',
+    js: 'Настоящий JavaScript. Вывод — <code>console.log()</code>, ввод — <code>prompt()</code> (берёт строки из поля «Ввод»).',
+    html: 'Пиши HTML и CSS — страница появится прямо здесь. Можно добавить и <code>&lt;script&gt;</code> с JavaScript.',
+    lua: 'Lua — основа Luau из Roblox. Вывод — <code>print()</code>, ввод — <code>io.read()</code>. Объектов Roblox (workspace, Instance) здесь нет — они работают только в Roblox Studio.',
+  };
+  const sbKey = lang => (lang === 'python' ? 'pitosha-sandbox' : 'pitosha-sandbox-' + lang);
+  const htmlPreview = code => `<iframe class="html-preview" sandbox="allow-scripts" srcdoc="${esc(code)}"></iframe>`;
+  function newSandbox(lang) {
+    return { lang, code: store.get(sbKey(lang)) || SB_START[lang], stdin: lang === 'html' ? '' : (lang === 'lua' || lang === 'js' || lang === 'python' ? 'Питоша' : ''), out: '', running: false };
+  }
   function openSandbox() {
-    S.sandbox = S.sandbox || { code: store.get('pitosha-sandbox') || 'name = input("Как тебя зовут? ")\nprint(f"Привет, {name}! 🐍")\n', stdin: 'Питоша', out: '', running: false };
+    if (!S.sandbox) S.sandbox = newSandbox(SB_LANGS.includes(LANG) ? LANG : 'python');
     S.view = 'sandbox';
-    window.PY.preload();
+    window.RUN.preload(S.sandbox.lang);
     render();
   }
+  function switchSandbox(lang) {
+    const ed = document.getElementById('sb-editor');
+    if (ed && S.sandbox) store.set(sbKey(S.sandbox.lang), ed.value);
+    S.sandbox = newSandbox(lang);
+    window.RUN.preload(lang);
+    haptic(); render();
+  }
   function sandboxScreen() {
-    const B = S.sandbox;
+    const B = S.sandbox, info = C.langInfo(B.lang);
     return `<div class="screen" style="padding-top:14px"><h2 class="title">🧪 Песочница</h2>
-      <p class="note" style="text-align:left;margin-top:-8px">Настоящий Python прямо в телефоне — пиши что угодно. Нужна библиотека? Просто напиши <code>import</code> или строку <code>pip install имя</code> — Питоша скачает её сам. Код сохраняется сам.</p>
+      <div class="sb-langs">${SB_LANGS.map(l => `<button class="${l === B.lang ? 'on' : ''}" data-sblang="${l}">${C.langInfo(l).ico} ${esc(C.langInfo(l).name)}</button>`).join('')}</div>
+      <p class="note" style="text-align:left;margin-top:-2px">${SB_NOTE[B.lang]} Код сохраняется сам.</p>
       <textarea class="editor" id="sb-editor" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off">${esc(B.code)}</textarea>
-      <label class="stdin-label">⌨️ Ввод для input() (каждое значение с новой строки):</label>
-      <textarea class="stdin" id="sb-stdin" spellcheck="false" rows="2">${esc(B.stdin)}</textarea>
-      <div class="code-tools"><button class="tool" data-act="sb-run">${B.running ? '⏳ Запуск…' : '▶️ Запустить'}</button>
+      ${B.lang === 'html' ? '' : `<label class="stdin-label">⌨️ Ввод (каждое значение с новой строки):</label>
+      <textarea class="stdin" id="sb-stdin" spellcheck="false" rows="2">${esc(B.stdin)}</textarea>`}
+      <div class="code-tools"><button class="tool" data-act="sb-run">${B.running ? '⏳ Запуск…' : (B.lang === 'html' ? '▶️ Показать страницу' : '▶️ Запустить')}</button>
         <button class="tool" data-act="sb-save">💾 Сохранить и поделиться</button></div>
       ${B.out ? `<div class="console">${B.out}</div>` : ''}
       <h3 class="sub">📂 Мои программы</h3>${snippetList()}
-      <button class="big ghost" data-act="home">На главную</button></div>`;
+      <button class="big ghost" data-act="home">На главную</button></div>`.replace('${info}', info.name);
   }
   function snippetList() {
     if (!S.snips) { api.snippets().then(r => { S.snips = r.list || []; if (S.view === 'sandbox') render(); }); return '<p class="note">Загружаю…</p>'; }
     if (!S.snips.length) return '<p class="note">Пока пусто. Нажми «Сохранить» — программа появится здесь, а ссылкой можно поделиться с друзьями.</p>';
-    return `<div class="card">${S.snips.map(s => `<div class="row"><code class="snip-prev">${esc(s.preview || '(пусто)')}</code>
+    return `<div class="card">${S.snips.map(s => `<div class="row"><code class="snip-prev">${C.langInfo(s.lang).ico} ${esc(s.preview || '(пусто)')}</code>
       <button class="price small" data-snip="${esc(s.id)}">Открыть</button><button class="price small" data-snip-share="${esc(s.link)}">📤</button></div>`).join('')}</div>`;
   }
   async function saveSnippet() {
     const B = S.sandbox, ed = document.getElementById('sb-editor');
     if (ed) B.code = ed.value;
     if (!B.code.trim()) return toast('Сначала напиши код ✍️');
-    const r = await api.snippetSave(B.code);
+    const r = await api.snippetSave(B.code, B.lang);
     if (r.error) return toast({ limit: 'Слишком много сохранений за сутки', too_long: 'Слишком длинная программа' }[r.error] || 'Не получилось сохранить');
     haptic('ok'); S.snips = null;
     toast('💾 Сохранено! Отправь ссылку другу');
     render();
-    shareLink(r.link, 'Посмотри мою программу на Python 🐍 Её можно запустить прямо в Telegram!');
+    shareLink(r.link, `Посмотри мою программу на ${C.langInfo(B.lang).name} ${C.langInfo(B.lang).ico} Её можно запустить прямо в Telegram!`);
   }
   // Чужой (или свой) сохранённый код по ссылке: посмотреть и запустить может любой
   async function openSnippet(id) {
     const r = await api.snippetGet(id);
     if (r.error) return toast('Этот код не найден 😔');
-    S.snip = { id: r.id, code: r.code, author: r.author, mine: r.mine, stdin: '', out: '', running: false };
+    S.snip = { id: r.id, code: r.code, lang: C.cleanLang(r.lang), author: r.author, mine: r.mine, stdin: '', out: '', running: false };
     S.view = 'snippet';
-    window.PY.preload();
+    window.RUN.preload(S.snip.lang);
     render(); window.scrollTo(0, 0);
   }
   function snippetScreen() {
-    const N = S.snip;
-    return `<div class="screen" style="padding-top:14px"><h2 class="title">🐍 Программа</h2>
+    const N = S.snip, info = C.langInfo(N.lang);
+    return `<div class="screen" style="padding-top:14px"><h2 class="title">${info.ico} Программа на ${esc(info.name)}</h2>
       <p class="note" style="text-align:left;margin-top:-8px">Автор: ${esc(N.author)}</p>
       <pre class="code">${highlight(N.code)}</pre>
-      <label class="stdin-label">⌨️ Ввод для input() (каждое значение с новой строки):</label>
-      <textarea class="stdin" id="snip-stdin" spellcheck="false" rows="2">${esc(N.stdin)}</textarea>
+      ${N.lang === 'html' ? '' : `<label class="stdin-label">⌨️ Ввод (каждое значение с новой строки):</label>
+      <textarea class="stdin" id="snip-stdin" spellcheck="false" rows="2">${esc(N.stdin)}</textarea>`}
       <div class="code-tools"><button class="tool" data-act="snip-run">${N.running ? '⏳ Запуск…' : '▶️ Запустить'}</button>
         <button class="tool" data-act="snip-to-sandbox">🧪 В песочницу</button>
         <button class="tool" data-snip-share="https://t.me/pythonshkabot?start=code_${esc(N.id)}">📤</button></div>
       ${N.out ? `<div class="console">${N.out}</div>` : ''}
       <button class="big ghost" data-act="home">На главную</button></div>`;
   }
-  async function runSnippet() {
-    const N = S.snip;
-    if (N.running) return;
-    const si = document.getElementById('snip-stdin'); if (si) N.stdin = si.value;
-    N.running = true; N.out = !window.PY.isWarm() ? '⏳ Загружаю Python (только в первый раз, ~10 секунд)…' : ''; render();
-    const r = await window.PY.run(N.code, [{ run: true, stdin: N.stdin }], 120000, { sandbox: true });
-    N.running = false;
-    if (r.error) N.out = pyFail(r);
-    else { const t = r.results[0]; N.out = `<div class="console-title">Вывод программы:</div><pre>${esc(t.printed || '(ничего не напечатано)')}</pre>` + (t.err ? `<div class="console-err">❌ ${esc(t.err)}</div>${tipHtml(explainError(t.err))}` : ''); }
-    render();
-  }
-  async function runSandbox() {
-    const B = S.sandbox;
+  // Запуск в песочнице или по ссылке: один и тот же путь для всех языков
+  async function runAny(B, stdinId) {
     if (B.running) return;
-    const ed = document.getElementById('sb-editor'), si = document.getElementById('sb-stdin');
-    if (ed) B.code = ed.value;
-    if (si) B.stdin = si.value;
-    B.running = true; B.out = !window.PY.isWarm() ? '⏳ Загружаю Python (только в первый раз, ~10 секунд)…' : ''; render();
-    const code = B.code, libs = /^\s*[!%]?\s*pip3?\s+install|^\s*(import|from)\s/m.test(code);
-    if (libs) B.out = (B.out ? B.out + '<br>' : '') + '📦 Проверяю и ставлю библиотеки — первый раз это может занять до минуты…', render();
-    const r = await window.PY.run(code, [{ run: true, stdin: B.stdin }], libs ? 120000 : 20000, { sandbox: true });
+    const si = document.getElementById(stdinId); if (si) B.stdin = si.value;
+    if (B.lang === 'html') { B.out = `<div class="console-title">Твоя страница:</div>${htmlPreview(B.code)}`; return render(); }
+    const wasCold = !window.RUN.isWarm(B.lang);
+    B.running = true; B.out = wasCold ? `⏳ Загружаю ${B.lang === 'lua' ? 'Lua' : 'Python'} (только в первый раз, ~10 секунд)…` : ''; render();
+    let r;
+    if (B.lang === 'python') {
+      const libs = /^\s*[!%]?\s*pip3?\s+install|^\s*(import|from)\s/m.test(B.code);
+      if (libs) { B.out = (B.out ? B.out + '<br>' : '') + '📦 Проверяю и ставлю библиотеки — первый раз это может занять до минуты…'; render(); }
+      r = await window.RUN.run('python', B.code, [{ run: true, stdin: B.stdin }], libs ? 120000 : 20000, { sandbox: true });
+    } else {
+      r = await window.RUN.run(B.lang, B.code, [{ run: true, stdin: B.stdin }], wasCold ? 60000 : 10000);
+    }
     B.running = false;
-    if (r.error) B.out = pyFail(r);
+    if (r.error) B.out = r.error === 'timeout' ? '⏱ Программа работает слишком долго. Может быть, бесконечный цикл?' : '⚠️ ' + esc(r.error);
     else {
       const t = r.results[0];
       // tkinter, pygame и т.п.: это не ошибка ученика — в телефоне просто нет окон. Объясняем по-доброму.
@@ -686,9 +749,15 @@
       B.out = (r.log && r.log.length ? `<div class="console-log">${r.log.map(esc).join('<br>')}</div>` : '') +
         (desk.length ? `<div class="console-info">💻 ${esc(desk.join(', '))} — это для компьютера: в телефоне нет окон, клавиатуры и звука Windows. Такой код заработает, если скачать Python на компьютер (python.org). А здесь пиши программы с <code>print()</code> и <code>input()</code> — им всё доступно!</div>` : '') +
         (deskErr ? '' : `<div class="console-title">Вывод программы:</div><pre>${esc(t.printed || '(ничего не напечатано)')}</pre>` +
-        (t.err ? `<div class="console-err">❌ ${esc(t.err)}</div>${tipHtml(explainError(t.err))}` : ''));
+        (t.err ? `<div class="console-err">❌ ${esc(t.err)}</div>${B.lang === 'python' ? tipHtml(explainError(t.err)) : ''}` : ''));
     }
     render();
+  }
+  function runSnippet() { return runAny(S.snip, 'snip-stdin'); }
+  function runSandbox() {
+    const ed = document.getElementById('sb-editor');
+    if (ed) { S.sandbox.code = ed.value; store.set(sbKey(S.sandbox.lang), ed.value); }
+    return runAny(S.sandbox, 'sb-stdin');
   }
 
   // ---------- Поделиться результатом: картинка с прогрессом ----------
@@ -701,7 +770,7 @@
     g.textAlign = 'center'; g.fillStyle = '#ffd43b';
     g.font = '900 96px Nunito, sans-serif'; g.fillText('🐍 Питоша', 540, 190);
     g.fillStyle = '#f2f6ff'; g.font = '800 54px Nunito, sans-serif';
-    g.fillText(f ? `Прошёл урок «${f.title.slice(0, 26)}»` : `${p.name || 'Ученик'} учит Python`, 540, 300);
+    g.fillText(f ? `Прошёл урок «${f.title.slice(0, 26)}»` : `${p.name || 'Ученик'} учит ${langName()}`, 540, 300);
     const stats = [['⭐', `${p.xp} XP`, `уровень ${C.level(p.xp)}`], ['🔥', `${p.streakNow}`, `${days(p.streakNow)} подряд`], ['📚', `${C.doneCount(p)}`, 'уроков'], ['🏅', `${Object.keys(p.ach || {}).length}`, 'ачивок']];
     stats.forEach(([ico, big, small], k) => {
       const x = 150 + (k % 2) * 400, y = 380 + Math.floor(k / 2) * 250;
@@ -710,14 +779,14 @@
       g.fillStyle = '#ffd43b'; g.font = '900 84px Nunito, sans-serif'; g.fillText(`${ico} ${big}`, x + 190, y + 115);
       g.fillStyle = '#9fb3d6'; g.font = '800 40px Nunito, sans-serif'; g.fillText(small, x + 190, y + 180);
     });
-    g.fillStyle = '#f2f6ff'; g.font = '800 46px Nunito, sans-serif'; g.fillText('Учи Python прямо в Telegram', 540, 940);
+    g.fillStyle = '#f2f6ff'; g.font = '800 46px Nunito, sans-serif'; g.fillText('Учи программирование в Telegram', 540, 940);
     g.fillStyle = '#ffd43b'; g.font = '900 52px Nunito, sans-serif'; g.fillText('@pythonshkabot', 540, 1010);
     return cv;
   }
   async function shareResult() {
     haptic();
     const p = S.player;
-    const text = `Я учу Python в Питоше 🐍 Уже ${C.doneCount(p)} уроков, уровень ${C.level(p.xp)}, серия ${p.streakNow} 🔥 Присоединяйся!`;
+    const text = `Я учу ${langName()} в Питоше ${C.langInfo(LANG).ico} Уже ${C.doneCount(p)} уроков, уровень ${C.level(p.xp)}, серия ${p.streakNow} 🔥 Присоединяйся!`;
     const link = 'https://t.me/pythonshkabot';
     try {
       const blob = await new Promise(ok => shareCanvas().toBlob(ok, 'image/jpeg', 0.9));
@@ -742,7 +811,7 @@
     if (r.error) return toast('Не получилось начать урок');
     S.L = { id, lesson: lessonById(id), i: 0, order: null, sel: null, text: '', checked: null, correct: 0 };
     if (r.resume) { S.L.i = r.resume.i; S.L.correct = r.resume.correct || 0; toast(`Продолжаем с вопроса ${r.resume.i + 1} 👌`); }
-    if (S.L.lesson.questions.some(q => q.type === 'code')) window.PY.preload(); // качаем Python заранее
+    if (S.L.lesson.questions.some(q => q.type === 'code')) window.RUN.preload(LANG); // качаем движок языка заранее
     newQuestion();
     S.view = 'lesson';
     render();
@@ -825,13 +894,14 @@
 
   const pyFail = r => (r.error === 'timeout'
     ? '⏱ Программа работает слишком долго. Может быть, бесконечный цикл?'
-    : (!window.PY.isWarm() ? '📶 Не получилось загрузить Python. Проверь интернет и попробуй ещё раз.' : '⚠️ ' + esc(r.error)));
+    : (!window.RUN.isWarm(LANG) ? '📶 Не получилось загрузить язык. Проверь интернет и попробуй ещё раз.' : '⚠️ ' + esc(r.error)));
 
   async function runCode() {
     const L = S.L;
     syncEditor();
-    L.running = true; L.out = !window.PY.isWarm() ? '⏳ Загружаю Python (только в первый раз, ~10 секунд)…' : ''; render();
-    const r = await window.PY.run(L.code, [{ run: true, stdin: L.stdin }]);
+    if (LANG === 'html') { L.out = `<div class="console-title">Твоя страница:</div>${htmlPreview(L.code)}`; return render(); }
+    L.running = true; L.out = loadingMsg(); render();
+    const r = await window.RUN.run(LANG, L.code, [{ run: true, stdin: L.stdin }]);
     L.running = false;
     if (r.error) L.out = pyFail(r);
     else {
@@ -845,8 +915,8 @@
     const L = S.L, q = L.lesson.questions[L.i];
     syncEditor();
     if (!L.code.trim()) return toast('Сначала напиши код ✍️');
-    L.running = true; L.out = !window.PY.isWarm() ? '⏳ Загружаю Python (только в первый раз, ~10 секунд)…' : '⏳ Проверяю…'; render();
-    const r = await window.PY.run(L.code, q.tests);
+    L.running = true; L.out = loadingMsg() || '⏳ Проверяю…'; render();
+    const r = await window.RUN.run(LANG, L.code, q.tests);
     L.running = false;
     if (r.error) { L.out = pyFail(r); return render(); }
     const passed = r.results.every(t => t.ok);
@@ -1036,6 +1106,7 @@
     else if (S.view === 'onboard') html = onboardScreen();
     else if (S.view === 'placement') html = placementScreen();
     else if (S.view === 'sandbox') html = sandboxScreen();
+    else if (S.view === 'langpick') html = langPickScreen();
     else if (S.view === 'admin') html = adminScreen();
     else if (S.view === 'snippet') html = snippetScreen();
     else html = topbar() + ({ learn: learnScreen, quests: questsScreen, top: topScreen, friends: friendsScreen, shop: shopScreen, me: meScreen, more: moreScreen }[S.tab] || learnScreen)() + tabs();
@@ -1046,7 +1117,7 @@
     const editor = document.getElementById('editor');
     if (editor) setupEditor(editor, v => { S.L.code = v; saveDraft(); });
     const sbEditor = document.getElementById('sb-editor');
-    if (sbEditor) setupEditor(sbEditor, v => { S.sandbox.code = v; store.set('pitosha-sandbox', v); });
+    if (sbEditor) setupEditor(sbEditor, v => { S.sandbox.code = v; store.set(sbKey(S.sandbox.lang), v); });
     const regInput = document.getElementById('reg-name');
     if (regInput) regInput.addEventListener('keydown', e => { if (e.key === 'Enter') saveProfile(); });
     const friendForm = document.getElementById('friend-form');
@@ -1101,9 +1172,12 @@
     else if (d.snip) openSnippet(d.snip);
     else if (d.snipShare) shareLink(d.snipShare, 'Посмотри мою программу на Python 🐍');
     else if (d.act === 'friend-search') searchFriends();
-    else if (d.act === 'invite') shareLink(S.player.refLink, 'Учи Python вместе со мной в Питоше 🐍 По моей ссылке мы сразу станем друзьями и сможем устроить дружеский забег!');
+    else if (d.act === 'invite') shareLink(S.player.refLink, 'Учи программирование вместе со мной в Питоше 🐍 Python, JavaScript, Lua для Roblox и другие! По моей ссылке мы сразу станем друзьями.');
     else if (d.act === 'sb-save') saveSnippet();
-    else if (d.act === 'snip-to-sandbox') { S.sandbox = { code: S.snip.code, stdin: '', out: '', running: false }; store.set('pitosha-sandbox', S.snip.code); S.view = 'sandbox'; render(); }
+    else if (d.act === 'snip-to-sandbox') { const lang = S.snip.lang || 'python'; store.set(sbKey(lang), S.snip.code); S.sandbox = { lang, code: S.snip.code, stdin: '', out: '', running: false }; S.view = 'sandbox'; render(); }
+    else if (d.lang) chooseLang(d.lang);
+    else if (d.act === 'langpick') { S.view = 'langpick'; haptic(); render(); window.scrollTo(0, 0); }
+    else if (d.sblang) switchSandbox(d.sblang);
     else if (d.act === 'snip-run') runSnippet();
     else if (d.act === 'vibro') { store.set('pitosha-vibro', store.get('pitosha-vibro') === 'off' ? 'on' : 'off'); haptic(); render(); }
     else if (d.place !== undefined) placementAnswer(d.place);

@@ -411,6 +411,22 @@
     return { skipped: k };
   }
 
+  // ---------- Языки программирования ----------
+  // Прогресс, опыт, огонёк, алмазы и Плюс — общие. У каждого языка своя дорожка уроков (id уроков с префиксом языка).
+  const LANGS = [
+    { id: 'python', name: 'Python', ico: '🐍', sandbox: true, prefix: '', about: 'Самый популярный язык: боты, игры, нейросети' },
+    { id: 'js', name: 'JavaScript', ico: '⚡', sandbox: true, prefix: 'js-', about: 'Сайты, браузерные игры и приложения' },
+    { id: 'html', name: 'HTML и CSS', ico: '🎨', sandbox: true, prefix: 'html-', about: 'Свои сайты и красивые странички' },
+    { id: 'lua', name: 'Lua для Roblox', ico: '🎮', sandbox: true, prefix: 'lua-', about: 'Скрипты для своих игр в Roblox' },
+    { id: 'sql', name: 'SQL', ico: '🗃️', sandbox: false, prefix: 'sql-', about: 'Базы данных — память любых приложений' },
+    { id: 'cs', name: 'C#', ico: '🎯', sandbox: false, prefix: 'cs-', about: 'Игры в Unity и программы для Windows' },
+    { id: 'cpp', name: 'C++', ico: '⚙️', sandbox: false, prefix: 'cpp-', about: 'Быстрые программы и олимпиады' },
+  ];
+  const cleanLang = l => (LANGS.some(x => x.id === l) ? l : 'python');
+  const langInfo = l => LANGS.find(x => x.id === cleanLang(l));
+  // Язык урока — по префиксу id (у Python префикса нет)
+  const lessonLang = id => (LANGS.find(x => x.prefix && String(id).startsWith(x.prefix)) || LANGS[0]).id;
+
   // ---------- Профиль: аватарка и имя для рейтинга ----------
   const AVATARS = ['🐍', '🦊', '🐼', '🐯', '🐸', '🐵', '🦁', '🐨', '🐙', '🦄', '🐲', '🤖', '👾', '🦖', '🐧', '🐺', '😎', '🥷', '🧙', '👽', '🐱', '🐶', '🦉', '🚀'];
   // Корни грубых слов — такие имена в рейтинге не пропускаем
@@ -452,6 +468,7 @@
     QUESTS, CHESTS, questsFor, questEvent, questStatus, claimQuest,
     GEM_SHOP, buyWithGems, STREAK_STEP, streakReward, awardStreakGems,
     REF_DAYS, REF_PLUS_DAYS, referralReady, grantPlusDays, makeCode, cleanCode,
+    LANGS, cleanLang, langInfo, lessonLang,
     RARITIES, QUEST_CHESTS, UPGRADE_CHANCE, rollChest, BOOST_MIN, BOOST_CHANCE, boostNow, applyBoost, FSTREAK_MAX, FSTREAK_GOALS, fstreakAlive, fstreakMark, fstreakReward, fstreakNext,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.CORE = api;

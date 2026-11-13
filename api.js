@@ -1,7 +1,10 @@
 // Связь приложения с сервером. Если сервер не указан (API_URL пустой) — демо-режим:
 // те же правила (core.js), но прогресс хранится только в этом браузере.
 (function (root) {
-  const { LESSONS, lessonById, lessonIndex } = root.COURSE; // UNITS берём из root.COURSE там, где нужен
+  // Урок может быть любого языка: курс находим по префиксу id (у Python префикса нет)
+  const courseOf = id => { const l = root.CORE.lessonLang(id); return l === 'python' ? root.COURSE : ((root.COURSES || {})[l] || root.COURSE); };
+  const lessonById = id => courseOf(id).lessonById(id);
+  const lessonIndex = id => courseOf(id).lessonIndex(id);
   const C = root.CORE;
   const cfg = root.PITOSHA_CONFIG || {};
   const tg = root.Telegram && root.Telegram.WebApp;
@@ -40,7 +43,8 @@
       streakDecline: id => post('/streak_decline', { id }),
       streakEnd: id => post('/streak_end', { id }),
       streakClaim: id => post('/streak_claim', { id }),
-      snippetSave: code => post('/snippet_save', { code }),
+      snippetSave: (code, lang) => post('/snippet_save', { code, lang }),
+      setLang: lang => post('/set_lang', { lang }),
       snippets: () => post('/snippets'),
       snippetGet: id => post('/snippet_get', { id }),
     };
@@ -93,6 +97,7 @@
       start(lessonId, restart) {
         const i = lessonIndex(lessonId);
         if (i < 0) return ok({ error: 'no_lesson' });
+        const LESSONS = courseOf(lessonId).LESSONS;
         if (!C.isUnlocked(data.player, LESSONS, i)) return ok({ error: 'locked' });
         C.refreshHearts(data.player, new Date());
         if (data.player.hearts <= 0) return ok({ error: 'no_hearts', player: view() });
@@ -206,16 +211,17 @@
         save();
         return ok({ chest: { ...got, n: goal.n }, player: view(), ...demoFriends() });
       },
-      snippetSave(code) {
+      setLang(lang) { data.player.lang = C.cleanLang(lang); save(); return ok({ player: view() }); },
+      snippetSave(code, lang) {
         if (!String(code || '').trim()) return ok({ error: 'empty' });
         const id = C.makeCode(Math.random, 8);
-        data.snippets.unshift({ id, code, at: new Date().toISOString() }); save();
+        data.snippets.unshift({ id, code, lang: C.cleanLang(lang), at: new Date().toISOString() }); save();
         return ok({ id, link: 'https://t.me/pythonshkabot?start=code_' + id });
       },
-      snippets: () => ok({ list: data.snippets.slice(0, 20).map(s => ({ id: s.id, preview: s.code.split('\n')[0].slice(0, 60), at: s.at, link: 'https://t.me/pythonshkabot?start=code_' + s.id })) }),
+      snippets: () => ok({ list: data.snippets.slice(0, 20).map(s => ({ id: s.id, preview: s.code.split('\n')[0].slice(0, 60), lang: s.lang || 'python', at: s.at, link: 'https://t.me/pythonshkabot?start=code_' + s.id })) }),
       snippetGet(id) {
         const s = data.snippets.find(x => x.id === C.cleanCode(id));
-        return ok(s ? { id: s.id, code: s.code, author: view().name, mine: true } : { error: 'not_found' });
+        return ok(s ? { id: s.id, code: s.code, lang: s.lang || 'python', author: view().name, mine: true } : { error: 'not_found' });
       },
       profile(name, avatar) {
         const c = C.cleanName(name);
