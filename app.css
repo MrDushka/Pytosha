@@ -417,3 +417,4 @@ h3.sub { font-size: 18px; font-weight: 900; margin: 18px 0 10px; }
 /* Админка */
 .adm-user { color: #4fc3ff; font-weight: 800; font-size: 13px; text-decoration: none; }
 .adm-nouser { color: var(--muted); font-size: 12px; font-weight: 700; }
+.admin-btn { width: 100%; margin: 12px 0 0; }

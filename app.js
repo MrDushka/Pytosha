@@ -263,7 +263,7 @@
     haptic('ok');
     if (R.first) toast(`Привет, ${c.name}! Погнали 🐍`);
     // Новичку — вопрос «знаешь ли основы», если он ещё ничего не прошёл
-    S.view = R.first && !S.player.placed && C.doneCount(S.player) === 0 ? 'onboard' : 'tabs';
+    S.view = 'tabs'; // после знакомства — сразу к урокам, без вступительного теста
     render();
   }
 
@@ -343,13 +343,14 @@
       <div class="card"><div class="profile-head"><div class="me-avatar">${avatarHtml((p.profile && p.profile.avatar) || '🐍')}</div><div style="flex:1"><b>${esc(p.name || 'Ученик')}</b> <button class="edit-btn" data-act="edit-profile">✏️</button>
         <div style="color:var(--muted);font-weight:800">Уровень ${lv} · ${inLv}/${C.XP_PER_LEVEL} XP</div>
         <div class="lvl-bar"><i style="width:${(inLv / C.XP_PER_LEVEL) * 100}%"></i></div></div></div></div>
+      ${p.admin ? '<button class="big admin-btn" data-act="admin">📊 Админка — кто онлайн и все ученики</button>' : ''}
       <div class="grid2">
         <div class="tile"><b>🔥 ${p.streakNow}</b><small>серия, ${days(p.streakNow)}</small></div>
         <div class="tile"><b>🏅 ${p.bestStreak || 0}</b><small>рекорд серии</small></div>
         <div class="tile"><b>⭐ ${p.xp}</b><small>всего опыта</small></div>
         <div class="tile"><b>📚 ${doneCount}/${LESSONS.length}</b><small>уроков пройдено</small></div>
       </div>
-      ${p.admin ? '<div class="card" style="margin-top:12px;border-color:var(--yellow)">🛠 <b>Режим создателя</b><br><span style="color:var(--muted);font-weight:700">Все уроки открыты, жизни бесконечные. В рейтинге тебя не видно — чтобы не мешать ученикам. Статистика — команда /stats в боте.</span><button class="big" data-act="admin" style="margin-top:10px">📊 Админка: кто онлайн</button></div>' : ''}
+      ${p.admin ? '<div class="card" style="margin-top:12px;border-color:var(--yellow)">🛠 <b>Режим создателя</b><br><span style="color:var(--muted);font-weight:700">Все уроки открыты, жизни бесконечные. В рейтинге тебя не видно — чтобы не мешать ученикам. Статистика — команда /stats в боте.</span></div>' : ''}
       ${p.plus && p.plusDays > 3650 ? '<div class="card plus-status"><div>👑 <b>Питоша Плюс</b><br><span>Навсегда</span></div></div>'
         : p.plus ? `<div class="card plus-status ${p.plusDays <= 3 ? 'ending' : ''}"><div>👑 <b>Питоша Плюс</b><br><span>${p.plusDays <= 3 ? '⏳ ' : ''}Закончится через ${p.plusDays} ${days(p.plusDays)} · до ${new Date(p.plusUntil).toLocaleDateString('ru-RU')}</span></div>
           <button class="price" data-act="renew">Продлить</button></div>`
