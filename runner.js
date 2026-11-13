@@ -60,13 +60,16 @@
     });
   }
 
+  // Курс «Этичный хакер» решает задачи на Python
+  const engine = l => (l === 'hack' ? 'python' : l);
   function run(lang, code, tests, timeoutMs, opts) {
+    lang = engine(lang);
     if (lang === 'python' || !lang) return root.PY.run(code, tests, timeoutMs, opts);
     if (lang === 'html') return runHtml(code, tests);
     return runWorker(lang, code, tests, timeoutMs);
   }
-  const isWarm = lang => (lang === 'python' || !lang ? root.PY.isWarm() : lang === 'lua' ? warmLua : true);
-  const preload = lang => { if (lang === 'python' || !lang) root.PY.preload(); else if (lang === 'lua' && !warmLua) runWorker('lua', '', [{ run: true }], 60000); };
+  const isWarm = l => { const lang = engine(l); return (lang === 'python' || !lang ? root.PY.isWarm() : lang === 'lua' ? warmLua : true); };
+  const preload = l => { const lang = engine(l); if (lang === 'python' || !lang) root.PY.preload(); else if (lang === 'lua' && !warmLua) runWorker('lua', '', [{ run: true }], 60000); };
 
   root.RUN = { run, isWarm, preload };
 })(typeof self !== 'undefined' ? self : this);

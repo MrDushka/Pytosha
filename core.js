@@ -421,6 +421,7 @@
     { id: 'sql', name: 'SQL', ico: '🗃️', sandbox: false, prefix: 'sql-', about: 'Базы данных — память любых приложений' },
     { id: 'cs', name: 'C#', ico: '🎯', sandbox: false, prefix: 'cs-', about: 'Игры в Unity и программы для Windows' },
     { id: 'cpp', name: 'C++', ico: '⚙️', sandbox: false, prefix: 'cpp-', about: 'Быстрые программы и олимпиады' },
+    { id: 'hack', name: 'Этичный хакер', ico: '🕵️', sandbox: false, prefix: 'hack-', about: 'Кибербезопасность: как ломают и как защищать. Задачи на Python' },
   ];
   const cleanLang = l => (LANGS.some(x => x.id === l) ? l : 'python');
   const langInfo = l => LANGS.find(x => x.id === cleanLang(l));
