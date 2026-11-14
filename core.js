@@ -281,6 +281,48 @@
     heart: { title: '❤️ Одно сердце', description: 'Восстановить одну жизнь', gems: 100 },
     freeze: { title: '🧊 Заморозка серии', description: 'Пропустишь день — огонь не погаснет', gems: 400 },
   };
+
+  // ---------- Украшения за алмазы: премиум-аватарки и рамки ----------
+  const GEM_AVATARS = [
+    { id: '🦅', gems: 150 }, { id: '🐊', gems: 150 }, { id: '🐝', gems: 150 }, { id: '🤠', gems: 200 },
+    { id: '🦈', gems: 250 }, { id: '🦸', gems: 300 }, { id: '🦹', gems: 300 }, { id: '🐉', gems: 350 },
+    { id: '👹', gems: 400 }, { id: '🧛', gems: 400 }, { id: '🧟', gems: 450 }, { id: '🥶', gems: 500 },
+  ];
+  const FRAMES = [
+    { id: 'none', name: 'Без рамки', gems: 0 },
+    { id: 'bronze', name: 'Бронза', gems: 150 },
+    { id: 'silver', name: 'Серебро', gems: 300 },
+    { id: 'gold', name: 'Золото', gems: 500 },
+    { id: 'neon', name: 'Неон', gems: 700 },
+    { id: 'fire', name: 'Огонь', gems: 900 },
+    { id: 'rainbow', name: 'Радуга', gems: 1200 },
+  ];
+  const frameOf = p => { const f = p.frame || 'none'; return FRAMES.some(x => x.id === f) ? f : 'none'; };
+  const ownsAvatar = (p, id) => (p.ownedAv || []).includes(id);
+  function cosmetics(p) {
+    const curAv = (p.profile && p.profile.avatar) || null, curFr = frameOf(p);
+    return {
+      gems: p.gems || 0,
+      avatars: GEM_AVATARS.map(a => ({ ...a, owned: ownsAvatar(p, a.id), equipped: curAv === a.id })),
+      frames: FRAMES.map(f => ({ ...f, owned: f.gems === 0 || (p.ownedFr || []).includes(f.id), equipped: curFr === f.id })),
+    };
+  }
+  function buyCosmetic(p, kind, id) {
+    const list = kind === 'av' ? GEM_AVATARS : kind === 'fr' ? FRAMES : null;
+    if (!list) return { error: 'bad' };
+    const it = list.find(x => x.id === id);
+    if (!it || it.gems <= 0) return { error: 'no_item' };
+    const ownedKey = kind === 'av' ? 'ownedAv' : 'ownedFr';
+    if ((p[ownedKey] || []).includes(id)) return { error: 'owned' };
+    if ((p.gems || 0) < it.gems) return { error: 'no_gems' };
+    p.gems -= it.gems;
+    p[ownedKey] = [...(p[ownedKey] || []), id];
+    return { ok: true };
+  }
+  function equipFrame(p, id) {
+    if (id === 'none' || (p.ownedFr || []).includes(id)) { p.frame = id; return { ok: true }; }
+    return { error: 'not_owned' };
+  }
   function buyWithGems(p, item, now) {
     const it = GEM_SHOP[item];
     if (!it) return { error: 'no_item' };
@@ -478,7 +520,8 @@
     try { head = atob(m[2].slice(0, 16)); } catch (e) { return false; }
     return PHOTO_MAGIC[m[1]].every(([at, sig]) => head.slice(at, at + sig.length) === sig);
   }
-  const cleanAvatar = a => (AVATARS.includes(a) || isPhoto(a) ? a : AVATARS[0]);
+  // Купленные премиум-аватарки тоже разрешены (owned — список id игрока)
+  const cleanAvatar = (a, owned = []) => (AVATARS.includes(a) || isPhoto(a) || (GEM_AVATARS.some(x => x.id === a) && owned.includes(a)) ? a : AVATARS[0]);
 
   const api = {
     MAX_HEARTS, HEART_MIN, XP_PER_LEVEL, mskDay, prevDay, newPlayer, hasPlus,
@@ -491,6 +534,7 @@
     NEWBIE_DAYS, ensureStart, newbieDaysLeft, isNewbie, unlimitedHearts,
     QUESTS, CHESTS, questsFor, questEvent, questStatus, claimQuest,
     GEM_SHOP, buyWithGems, STREAK_STEP, streakReward, awardStreakGems,
+    GEM_AVATARS, FRAMES, frameOf, ownsAvatar, cosmetics, buyCosmetic, equipFrame,
     weekId, prevWeekId, weekEndsMs, weekXpNow, addWeekXp, WEEK_PLUS_DAYS, WEEK_GEMS,
     REF_DAYS, REF_PLUS_DAYS, referralReady, grantPlusDays, makeCode, cleanCode,
     LANGS, cleanLang, langInfo, lessonLang,

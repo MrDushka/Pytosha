@@ -33,6 +33,8 @@
       daily: () => post('/daily'),
       placement: answers => post('/placement', { answers }),
       gemBuy: item => post('/gem_buy', { item }),
+      buyCosmetic: (kind, id) => post('/buy_cosmetic', { kind, id }),
+      equipFrame: id => post('/equip_frame', { id }),
       questClaim: id => post('/quest_claim', { id }),
       friends: () => post('/friends'),
       admin: () => post('/admin'),
@@ -154,6 +156,16 @@
         if (!res.error) save();
         return ok({ ...res, player: view() });
       },
+      buyCosmetic(kind, id) {
+        const res = C.buyCosmetic(data.player, kind, id);
+        if (!res.error) save();
+        return ok({ ...res, player: view() });
+      },
+      equipFrame(id) {
+        const res = C.equipFrame(data.player, id);
+        if (!res.error) save();
+        return ok({ ...res, player: view() });
+      },
       questClaim(id) {
         const got = C.claimQuest(data.player, new Date(), id);
         if (!got) return ok({ error: 'not_ready', player: view() });
@@ -233,7 +245,7 @@
       profile(name, avatar) {
         const c = C.cleanName(name);
         if (!c.ok) return ok({ error: 'bad_name', message: c.error });
-        data.player.profile = { name: c.name, avatar: C.cleanAvatar(avatar) };
+        data.player.profile = { name: c.name, avatar: C.cleanAvatar(avatar, data.player.ownedAv || []) };
         save();
         return ok({ player: view() });
       },

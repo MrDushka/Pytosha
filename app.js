@@ -221,9 +221,10 @@
     S.view = 'register';
   }
   // Аватарка: эмодзи или своё фото (data:image/… — проверено C.isPhoto, поэтому безопасно для src)
-  function avatarHtml(a) {
-    if (C.isPhoto(a)) return `<img class="av-img" src="${a}" alt="">`;
-    return `<span class="emo">${ent(C.AVATARS.includes(a) ? a : C.AVATARS[0])}</span>`; // эмодзи-аватарка остаётся эмодзи
+  function avatarHtml(a, frame) {
+    const known = C.AVATARS.includes(a) || C.GEM_AVATARS.some(x => x.id === a); // обычные и купленные премиум-аватарки
+    const inner = C.isPhoto(a) ? `<img class="av-img" src="${a}" alt="">` : `<span class="emo">${ent(known ? a : C.AVATARS[0])}</span>`;
+    return (frame && frame !== 'none') ? `<span class="av-wrap fr-${frame}">${inner}</span>` : inner; // рамка — кольцо вокруг аватарки
   }
   // Фото с телефона/компьютера → квадрат 128×128 по центру → JPEG поменьше
   async function photoToAvatar(file) {
@@ -260,12 +261,12 @@
     const R = S.reg;
     const own = C.isPhoto(R.avatar);
     return `<div class="center reg">
-      <div class="reg-avatar">${avatarHtml(R.avatar)}</div>
+      <div class="reg-avatar">${avatarHtml(R.avatar, S.player && S.player.frame)}</div>
       <h1>${R.first ? 'Давай знакомиться!' : 'Твой профиль'}</h1>
       <p>${R.first ? 'Выбери аватарку и имя — их увидят все в таблице лидеров 🏆' : 'Аватарка и имя видны в таблице лидеров'}</p>
       <label class="photo-btn ${own ? 'sel' : ''}">📷 ${own ? 'Выбрать другое фото' : 'Своё фото с телефона или компьютера'}
         <input type="file" id="photo-input" accept="image/*" hidden></label>
-      <div class="avatar-grid">${C.AVATARS.map(a => `<button class="av ${a === R.avatar ? 'sel' : ''}" data-avatar="${a}">${ent(a)}</button>`).join('')}</div>
+      <div class="avatar-grid">${C.AVATARS.map(a => `<button class="av ${a === R.avatar ? 'sel' : ''}" data-avatar="${a}">${ent(a)}</button>`).join('')}${((S.player && S.player.ownedAv) || []).map(a => `<button class="av premium ${a === R.avatar ? 'sel' : ''}" data-avatar="${a}">${ent(a)}</button>`).join('')}</div>
       <input class="answer-input name-input" id="reg-name" maxlength="16" autocomplete="off" placeholder="Твоё имя или ник" value="${esc(R.name)}">
       <div class="reg-error">${esc(R.error || '')}</div>
       <p class="note">Не пиши фамилию, школу и адрес — это видят все. Фото тоже видно всем: лучше не ставь своё лицо, выбери картинку или рисунок.</p>
@@ -364,7 +365,7 @@
     const lv = C.level(p.xp), inLv = C.levelProgress(p.xp);
     const doneCount = C.doneCount(p); // пропущенные вступительным тестом не считаем
     return `<div class="screen"><h2 class="title">Профиль</h2>
-      <div class="card"><div class="profile-head"><div class="me-avatar">${avatarHtml((p.profile && p.profile.avatar) || '🐍')}</div><div style="flex:1"><b>${esc(p.name || 'Ученик')}</b> <button class="edit-btn" data-act="edit-profile">✏️</button>
+      <div class="card"><div class="profile-head"><div class="me-avatar">${avatarHtml((p.profile && p.profile.avatar) || '🐍', p.frame)}</div><div style="flex:1"><b>${esc(p.name || 'Ученик')}</b> <button class="edit-btn" data-act="edit-profile">✏️</button>
         <div style="color:var(--muted);font-weight:800">Уровень ${lv} · ${inLv}/${C.XP_PER_LEVEL} XP</div>
         <div class="lvl-bar"><i style="width:${(inLv / C.XP_PER_LEVEL) * 100}%"></i></div></div></div></div>
       <button class="big ghost lang-btn" data-act="langpick">🌐 Язык: ${C.langInfo(LANG).ico} ${esc(langName())} — сменить</button>
@@ -405,7 +406,7 @@
     return `${mm} мин`;
   }
   function rankRow(u) {
-    return `<div class="row ${u.me ? 'me' : ''}"><div class="place">${medals[u.place - 1] || u.place}</div><div class="row-av">${avatarHtml(u.avatar || '🐍')}</div><div class="who">${esc(u.name)}${u.me ? ' (ты)' : ''}</div><div class="pts">${u.xp} XP</div></div>`;
+    return `<div class="row ${u.me ? 'me' : ''}"><div class="place">${medals[u.place - 1] || u.place}</div><div class="row-av">${avatarHtml(u.avatar || '🐍', u.fr)}</div><div class="who">${esc(u.name)}${u.me ? ' (ты)' : ''}</div><div class="pts">${u.xp} XP</div></div>`;
   }
   function topScreen() {
     const mode = S.topMode || 'tourn';
@@ -446,9 +447,37 @@
     { id: 'hearts', ico: '❤️', name: 'Все жизни сразу', desc: 'Не ждать восстановления', price: C.SHOP.hearts.stars },
     { id: 'freeze', ico: '🧊', name: 'Заморозка серии', desc: 'Пропустишь день — серия не сгорит', price: C.SHOP.freeze.stars },
   ];
+  // ---------- Магазин украшений: рамки и премиум-аватарки за алмазы ----------
+  function cosmeticsScreen() {
+    const p = S.player, c = C.cosmetics(p);
+    const av = (p.profile && p.profile.avatar) || '🐍';
+    const frameCard = f => {
+      const btn = f.equipped ? '<span class="cos-on">✓ Надета</span>'
+        : f.owned ? `<button class="price small" data-frame="${f.id}">Надеть</button>`
+        : `<button class="price small gem-price" data-buy-cos="fr:${f.id}" ${c.gems < f.gems ? 'disabled' : ''}>${f.gems} 💎</button>`;
+      return `<div class="cos-item ${f.equipped ? 'sel' : ''}"><div class="cos-prev">${avatarHtml(av, f.id)}</div><b>${esc(f.name)}</b>${btn}</div>`;
+    };
+    const avCard = a => {
+      const btn = a.equipped ? '<span class="cos-on">✓ Надета</span>'
+        : a.owned ? `<button class="price small" data-wear-av="${a.id}">Надеть</button>`
+        : `<button class="price small gem-price" data-buy-cos="av:${a.id}" ${c.gems < a.gems ? 'disabled' : ''}>${a.gems} 💎</button>`;
+      return `<div class="cos-item ${a.equipped ? 'sel' : ''}"><div class="cos-prev"><span class="emo">${ent(a.id)}</span></div>${btn}</div>`;
+    };
+    return `<div class="screen"><h2 class="title">Магазин</h2>${shopSeg()}
+      <div class="card gem-balance"><span>💎</span><div><b>${c.gems} алмазов</b><small>Трать на рамки и редкие аватарки — наряди профиль, его видят все в рейтинге!</small></div></div>
+      <h3 class="sub">🖼️ Рамки для аватарки</h3>
+      <div class="cos-grid">${c.frames.map(frameCard).join('')}</div>
+      <h3 class="sub">😎 Премиум-аватарки</h3>
+      <div class="cos-grid">${c.avatars.map(avCard).join('')}</div>
+      <p class="note">Купленное остаётся навсегда. Рамку и аватарку можно менять когда угодно.</p></div>`;
+  }
+  const shopSeg = () => `<div class="seg">
+    <button class="${S.shopSide !== 'gems' ? 'on' : ''}" data-shop-side="stars">⭐ За звёзды</button>
+    <button class="${S.shopSide === 'gems' ? 'on' : ''}" data-shop-side="gems">💎 Бесплатно</button></div>`;
   function shopScreen() {
     const p = S.player, promo = S.promo;
-    const seg = `<div class="seg"><button class="${S.shopSide !== 'gems' ? 'on' : ''}" data-shop-side="stars">⭐ За звёзды</button><button class="${S.shopSide === 'gems' ? 'on' : ''}" data-shop-side="gems">💎 Бесплатно</button></div>`;
+    const seg = shopSeg();
+    if (S.shopSide === 'cosm') return cosmeticsScreen();
     if (S.shopSide === 'gems') {
       return `<div class="screen"><h2 class="title">Магазин</h2>${seg}
         <div class="card gem-balance"><span>💎</span><div><b>${p.gems || 0} алмазов</b><small>1–10 за каждый урок, сундуки за задания и забеги, алмазы за каждые 10 дней серии</small></div></div>
@@ -486,6 +515,33 @@
     else if (r.error === 'full') toast('Все жизни и так на месте ❤️');
     else if (r.error) toast('Не получилось, попробуй ещё раз');
     else { haptic('ok'); toast(item === 'heart' ? '❤️ +1 жизнь!' : '🧊 Заморозка серии добавлена!'); }
+    render();
+  }
+
+  // ---------- Украшения: купить рамку/аватарку, надеть ----------
+  async function buyCosmetic(spec) {
+    const [kind, id] = spec.split(':');
+    haptic();
+    const r = await api.buyCosmetic(kind, id);
+    if (r.player) S.player = r.player;
+    if (r.error === 'no_gems') toast('Не хватает алмазов 💎 Проходи уроки и открывай сундуки!');
+    else if (r.error) toast('Не получилось, попробуй ещё раз');
+    else { haptic('ok'); toast('✨ Куплено! Нажми «Надеть»'); }
+    render();
+  }
+  async function equipFrame(id) {
+    haptic();
+    const r = await api.equipFrame(id);
+    if (r.player) S.player = r.player;
+    if (r.error) toast('Сначала купи эту рамку');
+    else haptic('ok');
+    render();
+  }
+  async function wearAvatar(id) {
+    haptic();
+    const r = await api.profile(S.player.name, id); // сохраняем профиль с новой аватаркой
+    if (r.player) { S.player = r.player; haptic('ok'); toast('😎 Аватарка обновлена!'); }
+    else toast('Не получилось, попробуй ещё раз');
     render();
   }
 
@@ -550,18 +606,18 @@
     if (p.relation === 'following') return '<span class="tag-wait">Ждём ответа</span>';
     return `<button class="price small" data-follow="${p.id}">${p.relation === 'follower' ? 'Подписаться в ответ' : 'Подписаться'}</button>`;
   };
-  const personRow = (p, right) => `<div class="row"><div class="row-av">${avatarHtml(p.avatar)}</div>
+  const personRow = (p, right) => `<div class="row"><div class="row-av">${avatarHtml(p.avatar, p.fr)}</div>
     <div class="who">${esc(p.name)}<small class="sub-line">${p.username ? '@' + esc(p.username) + ' · ' : ''}⭐ ${p.xp} XP${p.streak ? ' · 🔥 ' + p.streak : ''}</small></div>${right}</div>`;
   function streakCard(s) {
     const f = s.friend;
     if (s.status === 'pending') {
-      return `<div class="card fstreak pending"><div class="race-head">${avatarHtml(f.avatar)}<b>${esc(f.name)}</b>
+      return `<div class="card fstreak pending"><div class="race-head">${avatarHtml(f.avatar, f.fr)}<b>${esc(f.name)}</b>
         <small>${s.invitedByMe ? 'ждём, когда друг примет' : 'зовёт тебя в забег!'}</small></div>
         ${s.invitedByMe ? `<button class="big ghost" data-send="${s.id}">Отменить приглашение</button>`
           : `<div class="two-btn"><button class="big green" data-saccept="${s.id}">Принять</button><button class="big ghost" data-sdecline="${s.id}">Отказаться</button></div>`}</div>`;
     }
     const both = s.meToday && s.friendToday;
-    return `<div class="card fstreak ${both ? 'done' : ''}"><div class="race-head">${avatarHtml(f.avatar)}<b>Ты и ${esc(f.name)}</b>
+    return `<div class="card fstreak ${both ? 'done' : ''}"><div class="race-head">${avatarHtml(f.avatar, f.fr)}<b>Ты и ${esc(f.name)}</b>
         <span class="fs-days">🔥 ${s.days} ${days(s.days)}</span><button class="x-btn" data-send="${s.id}" aria-label="Закончить забег">✕</button></div>
       <div class="fs-today"><span class="${s.meToday ? 'ok' : ''}">${s.meToday ? '✅' : '⏳'} Ты</span><span class="${s.friendToday ? 'ok' : ''}">${s.friendToday ? '✅' : '⏳'} ${esc(f.name)}</span>
         <small>${both ? 'Сегодня забег продлён!' : 'Чтобы продлить, каждому нужно пройти хотя бы 1 урок сегодня'}</small></div>
@@ -619,6 +675,7 @@
       <h3 class="sub">⚙️ Настройки</h3>
       <div class="card menu">
         <button class="menu-row" data-act="vibro"><span>📳 Вибрация</span><i class="switch ${vibro ? 'on' : ''}"></i></button>
+        <button class="menu-row" data-act="snow"><span>❄️ Новогодний снег</span><i class="switch ${(window.SNOW ? window.SNOW.on() : true) ? 'on' : ''}"></i></button>
         <button class="menu-row" data-act="sandbox"><span>🧪 Песочница</span><i>›</i></button>
         <button class="menu-row" data-act="invite"><span>📨 Пригласить друга</span><i>›</i></button>
         <button class="menu-row" data-act="share"><span>📤 Поделиться успехами</span><i>›</i></button>
@@ -1191,6 +1248,9 @@
     else if (d.topMode) { S.topMode = d.topMode; S.top = null; S.tourn = null; haptic(); render(); }
     else if (d.shopSide) { S.shopSide = d.shopSide; haptic(); render(); }
     else if (d.gemBuy) gemBuy(d.gemBuy);
+    else if (d.buyCos) buyCosmetic(d.buyCos);
+    else if (d.frame) equipFrame(d.frame);
+    else if (d.wearAv) wearAvatar(d.wearAv);
     else if (d.quest) claimQuestChest(d.quest);
     else if (d.follow) frAction(() => api.follow(Number(d.follow)), r => (r.friend ? '🤝 Теперь вы друзья!' : '👋 Подписка отправлена — ждём, когда друг подпишется в ответ'));
     else if (d.unfollow) confirmThen('Удалить из друзей?', () => frAction(() => api.unfollow(Number(d.unfollow))));
@@ -1210,6 +1270,7 @@
     else if (d.sblang) switchSandbox(d.sblang);
     else if (d.act === 'snip-run') runSnippet();
     else if (d.act === 'vibro') { store.set('pitosha-vibro', store.get('pitosha-vibro') === 'off' ? 'on' : 'off'); haptic(); render(); }
+    else if (d.act === 'snow') { if (window.SNOW) window.SNOW.toggle(); haptic(); render(); }
     else if (d.place !== undefined) placementAnswer(d.place);
     else if (d.theme) pickTheme(d.theme);
     else if (d.act === 'daily') claimDaily();
