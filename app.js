@@ -390,9 +390,10 @@
       <div class="ach-grid">${C.ACHIEVEMENTS.map(a => { const got = p.ach && p.ach[a.id];
         return `<div class="ach ${got ? 'got' : ''}" title="${esc(a.desc)}"><span>${got ? a.ico : '🔒'}</span><b>${esc(a.title)}</b><small>${esc(a.desc)}</small></div>`; }).join('')}</div>
       <div class="grid2" style="margin-top:12px">
+        <button class="tile tile-btn" data-act="workshop"><b>🚀</b><small>Мой проект — свой сайт</small></button>
         <button class="tile tile-btn" data-act="sandbox"><b>🧪</b><small>Песочница</small></button>
-        <button class="tile tile-btn" data-act="share"><b>📤</b><small>Поделиться успехами</small></button>
       </div>
+      <button class="big ghost" data-act="share" style="margin-top:10px">📤 Поделиться успехами</button>
     </div>`;
   }
 
@@ -676,6 +677,7 @@
       <div class="card menu">
         <button class="menu-row" data-act="vibro"><span>📳 Вибрация</span><i class="switch ${vibro ? 'on' : ''}"></i></button>
         <button class="menu-row" data-act="snow"><span>❄️ Новогодний снег</span><i class="switch ${(window.SNOW ? window.SNOW.on() : true) ? 'on' : ''}"></i></button>
+        <button class="menu-row" data-act="workshop"><span>🚀 Мой проект — свой сайт</span><i>›</i></button>
         <button class="menu-row" data-act="sandbox"><span>🧪 Песочница</span><i>›</i></button>
         <button class="menu-row" data-act="invite"><span>📨 Пригласить друга</span><i>›</i></button>
         <button class="menu-row" data-act="share"><span>📤 Поделиться успехами</span><i>›</i></button>
@@ -798,6 +800,67 @@
     S.view = 'snippet';
     window.RUN.preload(S.snip.lang);
     render(); window.scrollTo(0, 0);
+  }
+  // ---------- Мастерская: свой сайт на GitHub Pages ----------
+  const PROJ_TPL = `<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Мой сайт</title>
+  <style>
+    body { font-family: sans-serif; background: #0d1f3c; color: #fff; text-align: center; padding: 40px 16px; }
+    h1 { color: #ffd43b; font-size: 40px; }
+    .card { background: #16294a; border-radius: 16px; padding: 20px; max-width: 420px; margin: 20px auto; }
+    a { color: #4dd0a0; }
+  </style>
+</head>
+<body>
+  <h1>Привет! Я Ярослав 👋</h1>
+  <div class="card">
+    <p>Это мой первый сайт. Я сделал его сам в Питоше! 🐍</p>
+    <p>Люблю: программирование, игры, Roblox.</p>
+  </div>
+  <p><a href="https://t.me/pythonshkabot">Моя Питоша</a></p>
+</body>
+</html>`;
+  function normLink(s) {
+    s = String(s || '').trim();
+    if (!s) return '';
+    if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
+    return /^https?:\/\/[^\s]+\.[^\s]+/i.test(s) ? s : '';
+  }
+  function openExternal(link) { if (tg && tg.openLink) tg.openLink(link); else window.open(link, '_blank'); }
+  function workshopScreen() {
+    const link = store.get('pitosha-project') || '';
+    const step = (n, html) => `<div class="ws-step"><div class="ws-num">${n}</div><div>${html}</div></div>`;
+    return `<div class="screen" style="padding-top:14px"><h2 class="title">🚀 Мой проект — свой сайт</h2>
+      <p class="note" style="text-align:left;margin-top:-6px">Сделай свой настоящий сайт в интернете и покажи друзьям! Бесплатно, на GitHub — там же, где живёт сама Питоша. Регистрацию лучше делать вместе со взрослым.</p>
+
+      <h3 class="sub">📋 Что делать по шагам</h3>
+      <div class="card ws-steps">
+        ${step(1, 'Зайди на <b>github.com</b> и зарегистрируйся (нужна почта — попроси взрослого помочь).')}
+        ${step(2, 'Справа сверху нажми <b>«+»</b> → <b>New repository</b>. Имя — например <code>mysite</code>. Поставь галочку <b>Add a README</b>. Нажми <b>Create repository</b>.')}
+        ${step(3, 'Нажми <b>Add file</b> → <b>Create new file</b>. Имя файла напиши ровно так: <code>index.html</code>')}
+        ${step(4, 'Скопируй шаблон кнопкой ниже, вставь в файл, поменяй текст на свой. Внизу нажми <b>Commit changes</b>.')}
+        ${step(5, 'Открой <b>Settings</b> репозитория → слева <b>Pages</b>. В «Branch» выбери <b>main</b> → <b>Save</b>.')}
+        ${step(6, 'Подожди минуту и обнови. Вверху появится ссылка вида <code>https://твой-ник.github.io/mysite/</code> — это твой сайт! 🎉')}
+        ${step(7, 'Вставь эту ссылку сюда ⬇️ — посмотришь его прямо тут и поделишься с друзьями.')}
+      </div>
+
+      <button class="big" data-act="copy-tpl">📋 Скопировать шаблон сайта</button>
+      <pre class="code" style="max-height:220px;overflow:auto">${esc(PROJ_TPL)}</pre>
+
+      <h3 class="sub">🔗 Моя ссылка</h3>
+      <input class="answer-input" id="proj-link" placeholder="https://твой-ник.github.io/mysite/" value="${esc(link)}" spellcheck="false" autocomplete="off">
+      <button class="big green" data-act="proj-save">Сохранить и посмотреть</button>
+      ${link ? `<div class="card" style="margin-top:12px">
+          <div class="console-title">Твой сайт:</div>
+          <iframe class="proj-frame" src="${esc(link)}" sandbox="allow-scripts allow-same-origin"></iframe>
+          <div class="code-tools"><button class="tool" data-act="proj-ext">🌐 Открыть в браузере</button><button class="tool" data-act="proj-share">📤 Поделиться</button></div>
+          <p class="note" style="margin-top:6px">Если тут пусто — нажми «Открыть в браузере»: некоторые сайты нельзя показывать в окошке.</p>
+        </div>` : ''}
+      <button class="big ghost" data-act="home" style="margin-top:12px">На главную</button></div>`;
   }
   function snippetScreen() {
     const N = S.snip, info = C.langInfo(N.lang);
@@ -1196,6 +1259,7 @@
     else if (S.view === 'langpick') html = langPickScreen();
     else if (S.view === 'admin') html = adminScreen();
     else if (S.view === 'snippet') html = snippetScreen();
+    else if (S.view === 'workshop') html = workshopScreen();
     else html = topbar() + ({ learn: learnScreen, quests: questsScreen, top: topScreen, friends: friendsScreen, shop: shopScreen, me: meScreen, more: moreScreen }[S.tab] || learnScreen)() + tabs();
     $app.innerHTML = svgify(html);
     document.body.classList.toggle('with-nav', S.view === 'tabs'); // боковая панель на компьютере — только на вкладках
@@ -1271,6 +1335,11 @@
     else if (d.act === 'snip-run') runSnippet();
     else if (d.act === 'vibro') { store.set('pitosha-vibro', store.get('pitosha-vibro') === 'off' ? 'on' : 'off'); haptic(); render(); }
     else if (d.act === 'snow') { if (window.SNOW) window.SNOW.toggle(); haptic(); render(); }
+    else if (d.act === 'workshop') { S.view = 'workshop'; haptic(); render(); window.scrollTo(0, 0); }
+    else if (d.act === 'copy-tpl') { copyText(PROJ_TPL, '📋 Шаблон скопирован! Вставь его в index.html'); }
+    else if (d.act === 'proj-save') { const el = document.getElementById('proj-link'); const link = normLink(el && el.value); if (!link) return toast('Вставь ссылку вида https://...github.io/...'); store.set('pitosha-project', link); haptic('ok'); toast('Сохранено! Смотри ниже 👇'); render(); }
+    else if (d.act === 'proj-ext') { const l = store.get('pitosha-project'); if (l) openExternal(l); }
+    else if (d.act === 'proj-share') { const l = store.get('pitosha-project'); if (l) shareLink(l, 'Смотри мой сайт — я сделал его сам в Питоше! 🚀🐍'); }
     else if (d.place !== undefined) placementAnswer(d.place);
     else if (d.theme) pickTheme(d.theme);
     else if (d.act === 'daily') claimDaily();

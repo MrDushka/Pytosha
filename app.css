@@ -463,3 +463,11 @@ h3.sub { font-size: 18px; font-weight: 900; margin: 18px 0 10px; }
 .cos-item .price.small { padding: 5px 10px; font-size: 12px; }
 .cos-on { color: var(--green); font-weight: 900; font-size: 12px; padding: 5px 0; }
 .av.premium { box-shadow: inset 0 0 0 2px #f5c518; }
+
+/* ---------- Мастерская: мой проект ---------- */
+.ws-steps { padding: 6px 4px; }
+.ws-step { display: flex; gap: 12px; align-items: flex-start; padding: 10px 8px; border-bottom: 1px solid var(--line); text-align: left; line-height: 1.4; font-weight: 700; }
+.ws-step:last-child { border-bottom: 0; }
+.ws-num { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--green); color: #06220f; font-weight: 900; display: flex; align-items: center; justify-content: center; }
+.ws-step code { background: var(--card2); padding: 1px 6px; border-radius: 6px; font-size: 13px; }
+.proj-frame { width: 100%; height: 360px; border: 0; border-radius: 12px; background: #fff; }
