@@ -39,11 +39,17 @@
   async function copyText(text, done) {
     try { await navigator.clipboard.writeText(text); toast(done || 'Скопировано'); } catch (e) { toast(text); }
   }
+  // Ссылка t.me внутри Telegram (с версии 6.1), иначе — новая вкладка
+  function openTg(url) {
+    const T = window.Telegram && window.Telegram.WebApp;
+    if (T && T.openTelegramLink && T.isVersionAtLeast && T.isVersionAtLeast('6.1')) { try { T.openTelegramLink(url); return; } catch (e) { /* старый клиент */ } }
+    window.open(url, '_blank');
+  }
   // Поделиться ссылкой через окно «Переслать» в Telegram
   function shareLink(link, text) {
     haptic();
     const url = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`;
-    if (tg && tg.openTelegramLink) tg.openTelegramLink(url); else window.open(url, '_blank');
+    openTg(url);
   }
 
   // ---------- Telegram ----------
@@ -665,7 +671,13 @@
     render();
     return r;
   }
-  function confirmThen(text, go) { if (tg && tg.showConfirm) tg.showConfirm(text, ok => { if (ok) go(); }); else if (confirm(text)) go(); }
+  // Окно «Да/Нет»: у старых версий Telegram (и в браузере) showConfirm бросает ошибку — тогда обычный confirm
+  function confirmThen(text, go) {
+    if (tg && tg.showConfirm && tg.isVersionAtLeast && tg.isVersionAtLeast('6.2')) {
+      try { tg.showConfirm(text, ok => { if (ok) go(); }); return; } catch (e) { /* не поддерживается */ }
+    }
+    if (confirm(text)) go();
+  }
 
   // ---------- Ещё: настройки ----------
   function moreScreen() {
@@ -830,7 +842,10 @@
     if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
     return /^https?:\/\/[^\s]+\.[^\s]+/i.test(s) ? s : '';
   }
-  function openExternal(link) { if (tg && tg.openLink) tg.openLink(link); else window.open(link, '_blank'); }
+  function openExternal(link) {
+    if (tg && tg.openLink && tg.isVersionAtLeast && tg.isVersionAtLeast('6.1')) { try { tg.openLink(link); return; } catch (e) { /* старый клиент */ } }
+    window.open(link, '_blank');
+  }
   function workshopScreen() {
     const link = store.get('pitosha-project') || '';
     const step = (n, html) => `<div class="ws-step"><div class="ws-num">${n}</div><div>${html}</div></div>`;
@@ -947,7 +962,7 @@
       }
     } catch (e) { if (e && e.name === 'AbortError') return; /* отменил — ничего не делаем */ }
     const url = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`;
-    if (tg && tg.openTelegramLink) tg.openTelegramLink(url); else window.open(url, '_blank');
+    openTg(url);
   }
 
   // ---------- Урок ----------
@@ -1185,9 +1200,7 @@
   }
   function askQuit() {
     const quit = () => { S.view = 'tabs'; S.L = null; render(); };
-    const text = 'Выйти из урока? Потом продолжишь с этого же вопроса.';
-    if (tg && tg.showConfirm) tg.showConfirm(text, ok => { if (ok) quit(); });
-    else if (confirm(text)) quit();
+    confirmThen('Выйти из урока? Потом продолжишь с этого же вопроса.', quit);
   }
 
   function finishScreen() {
@@ -1360,8 +1373,7 @@
     else if (d.act === 'giveup') {
       syncEditor();
       const sure = () => submitCode(false);
-      if (tg && tg.showConfirm) tg.showConfirm('Показать решение? Задача засчитается как ошибка (−1 жизнь).', ok => { if (ok) sure(); });
-      else if (confirm('Показать решение? Задача засчитается как ошибка (−1 жизнь).')) sure();
+      confirmThen('Показать решение? Задача засчитается как ошибка (−1 жизнь).', sure);
     }
     else if (d.act === 'idk') check(true);
     else if (d.act === 'next') next();
