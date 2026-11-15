@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Конструктор</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+ :root{ --bg:#0f1116; --card:#1b1e26; --fg:#eef1f6; --muted:#9aa3b2; --acc:#7c5cff; --acc2:#39d98a; }
+ *{box-sizing:border-box}
+ body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,-apple-system,sans-serif;padding:16px;padding-bottom:40px}
+ h1{font-size:22px;margin:4px 0 2px}
+ .sub{color:var(--muted);font-size:14px;margin-bottom:14px}
+ .card{background:var(--card);border-radius:16px;padding:14px;margin:12px 0}
+ textarea{width:100%;min-height:92px;border-radius:12px;border:1px solid #2a2e39;background:#12151c;color:var(--fg);padding:12px;font:16px system-ui;resize:vertical}
+ button{border:0;border-radius:12px;padding:13px 16px;font:600 16px system-ui;color:#fff;background:var(--acc);width:100%;cursor:pointer}
+ button.g{background:var(--acc2);color:#07241a}
+ button.s{background:#2a2e39}
+ button:disabled{opacity:.5}
+ .row{display:flex;gap:8px;margin-top:8px}
+ .left{font-size:13px;color:var(--muted);margin-top:8px}
+ .ideas{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+ .ideas span{background:#23262f;color:var(--muted);border-radius:20px;padding:6px 11px;font-size:13px;cursor:pointer}
+ iframe{width:100%;height:360px;border:0;border-radius:12px;background:#fff;margin-top:8px}
+ .badge{display:inline-block;background:#23262f;border-radius:20px;padding:4px 10px;font-size:13px;color:var(--muted)}
+ .price{font-size:18px;font-weight:700}
+ .err{color:#ff8f8f}
+ .ok{color:var(--acc2)}
+ .spin{display:inline-block;width:16px;height:16px;border:3px solid #fff5;border-top-color:#fff;border-radius:50%;animation:sp 1s linear infinite;vertical-align:-3px;margin-right:6px}
+ @keyframes sp{to{transform:rotate(360deg)}}
+</style></head><body>
+<h1>✨ Конструктор</h1>
+<div class="sub">Напиши, что сделать — нейросеть соберёт проект сама и покажет. Понравится — можно выкупить за ⭐.</div>
+
+<div class="card">
+ <textarea id="prompt" placeholder="Например: сделай игру где нужно кликать по звёздочкам и считать очки"></textarea>
+ <div class="ideas" id="ideas"></div>
+ <button id="go" style="margin-top:10px">✨ Сделать</button>
+ <div class="left" id="left"></div>
+</div>
+
+<div id="result"></div>
+<div id="mine"></div>
+
+<script>
+const API = 'https://bebjhpmknpcwwinhurtp.supabase.co/functions/v1/maker';
+const tg = window.Telegram && window.Telegram.WebApp; if(tg){tg.ready();tg.expand();}
+const INIT = tg ? tg.initData : '';
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const openLink = u => { if(tg&&tg.openLink)tg.openLink(u); else window.open(u,'_blank'); };
+const viewLink = id => location.origin + location.pathname.replace(/index\.html$/,'') + 'view.html?id=' + id;
+
+const IDEAS = ['игра «поймай звезду»','сайт про котиков','калькулятор','рисовалка','таймер для уроков','викторина про космос','гадание на кнопке'];
+$('#ideas').innerHTML = IDEAS.map(i=>'<span>'+i+'</span>').join('');
+$('#ideas').onclick = e => { if(e.target.tagName==='SPAN'){ $('#prompt').value = 'сделай '+e.target.textContent; } };
+
+async function call(path, opts){
+  const r = await fetch(API+path, Object.assign({ headers:{ 'Content-Type':'application/json','X-Init-Data':INIT } }, opts));
+  return r.json();
+}
+function frame(html){ const f=document.createElement('iframe'); f.setAttribute('sandbox','allow-scripts allow-pointer-lock'); f.srcdoc=html; return f; }
+
+async function refresh(){
+  if(!INIT){ $('#left').textContent='Открой приложение внутри Telegram, чтобы создавать проекты.'; return; }
+  const d = await call('/mine', { method:'GET' });
+  if(typeof d.left==='number') $('#left').textContent = 'Осталось бесплатно сегодня: '+d.left;
+  if(d.projects && d.projects.length){
+    const box = document.createElement('div'); box.className='card';
+    box.innerHTML = '<b>Мои проекты</b>';
+    d.projects.forEach(p=>{
+      const row = document.createElement('div');
+      row.style.cssText='margin-top:10px;border-top:1px solid #2a2e39;padding-top:10px';
+      row.innerHTML = '<b>'+esc(p.title)+'</b> <span class="badge">'+esc(p.tier)+'</span> '+
+        (p.paid?'<span class="ok">✓ куплен</span>':'<span class="badge">'+p.price+' ⭐</span>');
+      const r2 = document.createElement('div'); r2.className='row';
+      const bOpen=document.createElement('button'); bOpen.className='s'; bOpen.textContent='👀 Открыть'; bOpen.onclick=()=>openLink(viewLink(p.id));
+      r2.appendChild(bOpen);
+      if(p.paid){ const bDl=document.createElement('button'); bDl.className='g'; bDl.textContent='⬇️ Скачать'; bDl.onclick=()=>openLink(API+'/download/'+p.id); r2.appendChild(bDl); }
+      else { const bBuy=document.createElement('button'); bBuy.className='g'; bBuy.textContent='⭐ Купить '+p.price; bBuy.onclick=()=>buy(p.id); r2.appendChild(bBuy); }
+      row.appendChild(r2); box.appendChild(row);
+    });
+    const m=$('#mine'); m.innerHTML=''; m.appendChild(box);
+  } else $('#mine').innerHTML='';
+}
+
+$('#go').onclick = async () => {
+  const prompt = $('#prompt').value.trim();
+  if(prompt.length<3){ $('#result').innerHTML='<div class="card err">Напиши, что сделать 🙂</div>'; return; }
+  if(!INIT){ $('#result').innerHTML='<div class="card err">Открой приложение внутри Telegram.</div>'; return; }
+  $('#go').disabled=true; $('#go').innerHTML='<span class="spin"></span>Нейросеть делает проект…';
+  $('#result').innerHTML='<div class="card sub">Это может занять до минуты ⏳</div>';
+  let d;
+  try{ d = await call('/make', { method:'POST', body: JSON.stringify({ prompt }) }); }
+  catch(e){ d = { error:'net', message:'Нет связи, попробуй ещё раз.' }; }
+  $('#go').disabled=false; $('#go').textContent='✨ Сделать';
+  if(d.error){ $('#result').innerHTML='<div class="card err">'+esc(d.message||'Не получилось, попробуй ещё раз.')+'</div>'; refresh(); return; }
+  const card = document.createElement('div'); card.className='card';
+  card.innerHTML = '<b>'+esc(d.title)+'</b> <span class="badge">'+esc(d.tier)+'</span>';
+  card.appendChild(frame(d.previewHtml));
+  const price=document.createElement('div'); price.className='price'; price.style.marginTop='10px'; price.textContent='Цена: '+d.price+' ⭐'; card.appendChild(price);
+  const note=document.createElement('div'); note.className='sub'; note.textContent='Это превью с водяным знаком. Купи — получишь чистую ссылку и код.'; card.appendChild(note);
+  const r2=document.createElement('div'); r2.className='row';
+  const bOpen=document.createElement('button'); bOpen.className='s'; bOpen.textContent='👀 Во весь экран'; bOpen.onclick=()=>openLink(viewLink(d.id)); r2.appendChild(bOpen);
+  const bBuy=document.createElement('button'); bBuy.className='g'; bBuy.textContent='⭐ Купить '+d.price; bBuy.onclick=()=>buy(d.id); r2.appendChild(bBuy);
+  card.appendChild(r2);
+  const res=$('#result'); res.innerHTML=''; res.appendChild(card);
+  refresh();
+};
+
+async function buy(id){
+  const d = await call('/buy', { method:'POST', body: JSON.stringify({ id }) });
+  if(d.message){ alert(d.message); refresh(); return; }
+  if(d.invoiceUrl && tg && tg.openInvoice){
+    tg.openInvoice(d.invoiceUrl, status => { if(status==='paid'){ setTimeout(refresh, 1500); } });
+  } else if(d.invoiceUrl){ openLink(d.invoiceUrl); }
+  else { alert('Не удалось создать счёт, попробуй ещё раз.'); }
+}
+window.buy=buy;
+refresh();
+</script></body></html>
